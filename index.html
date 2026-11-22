@@ -138,7 +138,11 @@
       <li>Account · Cloudflare Pages · Read</li>
       <li>Account · Cloudflare Pages · Edit（要部署 Pages 才需要）</li>
       <li>Account · Workers Scripts · Read</li>
-      <li>Account · Workers Scripts · Edit（要部署 Workers 才需要）</li>
+      <li>Account · Workers Scripts · Edit（要部署 Workers、绑 Worker 域名才需要）</li>
+      <li>Account · Workers KV Storage · Read</li>
+      <li>Account · Workers KV Storage · Edit（要用 KV 空间才需要）</li>
+      <li>Account · Cloudflare Tunnel · Read</li>
+      <li>Account · Cloudflare Tunnel · Edit（要用隧道才需要）</li>
       <li>Account · Account Settings · Read</li>
       <li>Zone · Zone · Read</li>
       <li>Zone · DNS · Edit（要改 DNS 记录才需要）</li>
@@ -154,6 +158,9 @@
       <button data-tab="dns">DNS</button>
       <button data-tab="workers">Workers</button>
       <button data-tab="pages">Pages</button>
+      <button data-tab="kv">KV</button>
+      <button data-tab="domains">域名</button>
+      <button data-tab="tunnel">隧道</button>
       <button data-tab="usage">用量</button>
     </div>
 
@@ -269,6 +276,79 @@
         <div class="err" id="usErr"></div>
       </div>
     </div>
+
+    <div id="tab-kv" class="tabpage hidden">
+      <div class="card">
+        <h2>KV 空间</h2>
+        <label for="kvAcctSel">选择账号</label>
+        <select id="kvAcctSel"></select>
+        <div id="kvList" style="margin-top:10px"><div class="loading">加载中…</div></div>
+      </div>
+      <div class="card">
+        <h2>新建 KV 空间</h2>
+        <label for="kvTitle">名称</label>
+        <input type="text" id="kvTitle" placeholder="例如 my-kv">
+        <button class="btn" id="kvCreateBtn">创建</button>
+        <div class="err" id="kvErr"></div>
+        <div class="ok" id="kvOk"></div>
+        <p class="small" style="margin-top:8px">需要 Token 有 Workers KV Storage · Edit 权限。</p>
+      </div>
+    </div>
+
+    <div id="tab-domains" class="tabpage hidden">
+      <div class="card">
+        <h2>域名绑定</h2>
+        <label for="dmAcctSel">选择账号</label>
+        <select id="dmAcctSel"></select>
+        <h3>Worker 绑定域名</h3>
+        <label for="dmWkSel">选择 Worker</label>
+        <select id="dmWkSel"></select>
+        <label for="dmWkHost">域名（须是已接入 Cloudflare 的域名）</label>
+        <input type="text" id="dmWkHost" placeholder="例如 app.example.com">
+        <button class="btn" id="dmWkBtn">绑定到 Worker</button>
+        <div class="err" id="dmWkErr"></div>
+        <div class="ok" id="dmWkOk"></div>
+        <div id="dmWkList" style="margin-top:10px"></div>
+        <h3>Pages 绑定域名</h3>
+        <label for="dmPgSel">选择 Pages 项目</label>
+        <select id="dmPgSel"></select>
+        <label for="dmPgHost">域名</label>
+        <input type="text" id="dmPgHost" placeholder="例如 www.example.com">
+        <button class="btn" id="dmPgBtn">绑定到 Pages</button>
+        <div class="err" id="dmPgErr"></div>
+        <div class="ok" id="dmPgOk"></div>
+        <div id="dmPgList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div id="tab-tunnel" class="tabpage hidden">
+      <div class="card">
+        <h2>Cloudflare Tunnel</h2>
+        <label for="tnAcctSel">选择账号</label>
+        <select id="tnAcctSel"></select>
+        <div id="tnList" style="margin-top:10px"><div class="loading">加载中…</div></div>
+      </div>
+      <div class="card">
+        <h2>新建隧道</h2>
+        <label for="tnName">隧道名称</label>
+        <input type="text" id="tnName" placeholder="例如 my-tunnel">
+        <button class="btn" id="tnCreateBtn">创建隧道</button>
+        <div class="err" id="tnErr"></div>
+        <div class="ok" id="tnOk"></div>
+        <p class="small" style="margin-top:8px">需要 Token 有 Cloudflare Tunnel · Edit 权限。创建后点隧道卡片上的“Token”查看 cloudflared 用的 Token，点“路由”可给隧道绑公网域名；隧道本身要在你的服务器或电脑上运行 cloudflared 才能生效。</p>
+      </div>
+      <div class="card hidden" id="tnRouteCard">
+        <h2 id="tnRouteTitle">隧道路由</h2>
+        <label for="tnRouteHost">公网域名</label>
+        <input type="text" id="tnRouteHost" placeholder="例如 app.example.com">
+        <label for="tnRouteSvc">本地服务地址</label>
+        <input type="text" id="tnRouteSvc" placeholder="例如 http://localhost:3000">
+        <button class="btn" id="tnRouteBtn">添加路由</button>
+        <div class="err" id="tnRouteErr"></div>
+        <div class="ok" id="tnRouteOk"></div>
+        <div id="tnRouteList" style="margin-top:10px"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -344,7 +424,7 @@ async function loadAll() {
   fillAcctSelects();
   renderZones();
   if (zones.length) loadDns(zones[0].id);
-  if (accounts.length) { loadWorkers(accounts[0].id); loadPages(accounts[0].id); }
+  if (accounts.length) { loadWorkers(accounts[0].id); loadPages(accounts[0].id); loadKv(accounts[0].id); loadDomainTab(accounts[0].id); loadTunnels(accounts[0].id); }
   if (zones.length) loadUsage();
 }
 
@@ -357,6 +437,9 @@ function fillAcctSelects() {
   var opts = accounts.map(function(a){ return '<option value="' + a.id + '">' + esc(a.name || a.id) + '</option>'; }).join("");
   $("wkAcctSel").innerHTML = opts || '<option value="">（无账号）</option>';
   $("pgAcctSel").innerHTML = opts || '<option value="">（无账号）</option>';
+  $("kvAcctSel").innerHTML = opts || '<option value="">（无账号）</option>';
+  $("dmAcctSel").innerHTML = opts || '<option value="">（无账号）</option>';
+  $("tnAcctSel").innerHTML = opts || '<option value="">（无账号）</option>';
 }
 
 /* ---------- 标签页 ---------- */
@@ -459,7 +542,7 @@ async function loadPages(acctId) {
   el.innerHTML = '<div class="loading">加载中…</div>';
   $("pgDepCard").classList.add("hidden");
   try {
-    var list = await cf("/accounts/" + acctId + "/pages/projects?per_page=50");
+    var list = await cf("/accounts/" + acctId + "/pages/projects?per_page=10");
     $("pgUpProjSel").innerHTML = list.map(function(p){ return '<option value="' + esc(p.name) + '">' + esc(p.name) + '</option>'; }).join("") || '<option value="">（无项目）</option>';
     if (!list.length) { el.innerHTML = '<p class="muted">该账号下暂无 Pages 项目。</p>'; return; }
     el.innerHTML = list.map(function(p){
@@ -499,6 +582,220 @@ async function loadDeployments(acctId, name) {
     el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
   }
 }
+
+
+/* ---------- KV ---------- */
+async function loadKv(acctId) {
+  var el = $("kvList");
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    var list = await cf("/accounts/" + acctId + "/storage/kv/namespaces?per_page=50");
+    if (!list.length) { el.innerHTML = '<p class="muted">该账号下暂无 KV 空间。</p>'; return; }
+    el.innerHTML = list.map(function(ns){
+      return '<div class="item"><div class="row"><div><div class="t mono">' + esc(ns.title) + '</div>' +
+        '<div class="d mono">' + esc(ns.id) + '</div></div>' +
+        '<button class="btn danger small" onclick="delKv(\'' + ns.id + '\',\'' + esc(ns.title).replace(/\'/g,"\\'") + '\')">删除</button></div></div>';
+    }).join("");
+  } catch (e) {
+    el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
+  }
+}
+async function delKv(nsId, title) {
+  if (!confirm("确定删除 KV 空间「" + title + "」吗？里面的所有键值都会一起删除，不可恢复。")) return;
+  try {
+    await cf("/accounts/" + $("kvAcctSel").value + "/storage/kv/namespaces/" + nsId, "DELETE");
+    loadKv($("kvAcctSel").value);
+  } catch (e) { showErr($("kvErr"), e); }
+}
+$("kvCreateBtn").addEventListener("click", async function(){
+  var title = $("kvTitle").value.trim();
+  if (!title) { showErr($("kvErr"), "请先填写 KV 空间名称。"); return; }
+  $("kvErr").style.display = "none"; $("kvOk").style.display = "none";
+  try {
+    var ns = await cf("/accounts/" + $("kvAcctSel").value + "/storage/kv/namespaces", "POST", { title: title });
+    $("kvOk").style.display = "block"; $("kvOk").textContent = "已创建 KV 空间「" + (ns.title || title) + "」。";
+    $("kvTitle").value = "";
+    loadKv($("kvAcctSel").value);
+  } catch (e) { showErr($("kvErr"), e); }
+});
+$("kvAcctSel").addEventListener("change", function(){ loadKv(this.value); });
+
+/* ---------- 域名绑定 ---------- */
+async function loadDomainTab(acctId) {
+  try {
+    var scripts = await cf("/accounts/" + acctId + "/workers/scripts?per_page=50");
+    $("dmWkSel").innerHTML = scripts.map(function(w){ return '<option value="' + esc(w.id) + '">' + esc(w.id) + '</option>'; }).join("") || '<option value="">（无 Worker）</option>';
+  } catch (e) { $("dmWkSel").innerHTML = '<option value="">加载失败</option>'; }
+  try {
+    var projs = await cf("/accounts/" + acctId + "/pages/projects?per_page=10");
+    $("dmPgSel").innerHTML = projs.map(function(p){ return '<option value="' + esc(p.name) + '">' + esc(p.name) + '</option>'; }).join("") || '<option value="">（无项目）</option>';
+  } catch (e) { $("dmPgSel").innerHTML = '<option value="">加载失败</option>'; }
+  loadWorkerDomains(acctId);
+  loadPagesDomains(acctId);
+}
+async function loadWorkerDomains(acctId) {
+  var el = $("dmWkList");
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    var list = await cf("/accounts/" + acctId + "/workers/domains");
+    if (!list.length) { el.innerHTML = '<p class="muted">暂无已绑定的 Worker 域名。</p>'; return; }
+    el.innerHTML = list.map(function(d){
+      return '<div class="item"><div class="row"><div><div class="t mono">' + esc(d.hostname) + '</div>' +
+        '<div class="d">' + esc(d.service) + ' · ' + esc(d.zone_name || "") + '</div></div>' +
+        '<button class="btn danger small" onclick="delWorkerDomain(\'' + d.id + '\',\'' + esc(d.hostname) + '\')">解绑</button></div></div>';
+    }).join("");
+  } catch (e) { el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>'; }
+}
+async function delWorkerDomain(domainId, hostname) {
+  if (!confirm("确定把 " + hostname + " 从 Worker 上解绑吗？")) return;
+  try {
+    await cf("/accounts/" + $("dmAcctSel").value + "/workers/domains/" + domainId, "DELETE");
+    loadWorkerDomains($("dmAcctSel").value);
+  } catch (e) { showErr($("dmWkErr"), e); }
+}
+async function loadPagesDomains(acctId) {
+  var proj = $("dmPgSel").value;
+  var el = $("dmPgList");
+  if (!proj) { el.innerHTML = '<p class="muted">请先选择 Pages 项目。</p>'; return; }
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    var list = await cf("/accounts/" + acctId + "/pages/projects/" + encodeURIComponent(proj) + "/domains");
+    if (!list.length) { el.innerHTML = '<p class="muted">该项目暂无自定义域名。</p>'; return; }
+    el.innerHTML = list.map(function(d){
+      var name = d.name || d.domain || "";
+      return '<div class="item"><div class="row"><div><div class="t mono">' + esc(name) + '</div>' +
+        '<div class="d">' + esc(d.status || "") + '</div></div>' +
+        '<button class="btn danger small" onclick="delPagesDomain(\'' + esc(name).replace(/\'/g,"\\'") + '\')">解绑</button></div></div>';
+    }).join("");
+  } catch (e) { el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>'; }
+}
+async function delPagesDomain(name) {
+  if (!confirm("确定把 " + name + " 从 Pages 项目上解绑吗？")) return;
+  try {
+    await cf("/accounts/" + $("dmAcctSel").value + "/pages/projects/" + encodeURIComponent($("dmPgSel").value) + "/domains/" + encodeURIComponent(name), "DELETE");
+    loadPagesDomains($("dmAcctSel").value);
+  } catch (e) { showErr($("dmPgErr"), e); }
+}
+$("dmWkBtn").addEventListener("click", async function(){
+  var host = $("dmWkHost").value.trim();
+  var svc = $("dmWkSel").value;
+  if (!host || !svc) { showErr($("dmWkErr"), "请先选择 Worker 并填写域名。"); return; }
+  $("dmWkErr").style.display = "none"; $("dmWkOk").style.display = "none";
+  try {
+    await cf("/accounts/" + $("dmAcctSel").value + "/workers/domains", "POST", { hostname: host, service: svc });
+    $("dmWkOk").style.display = "block"; $("dmWkOk").textContent = "已把 " + host + " 绑定到 Worker " + svc + "。";
+    $("dmWkHost").value = "";
+    loadWorkerDomains($("dmAcctSel").value);
+  } catch (e) { showErr($("dmWkErr"), e); }
+});
+$("dmPgBtn").addEventListener("click", async function(){
+  var host = $("dmPgHost").value.trim();
+  var proj = $("dmPgSel").value;
+  if (!host || !proj) { showErr($("dmPgErr"), "请先选择 Pages 项目并填写域名。"); return; }
+  $("dmPgErr").style.display = "none"; $("dmPgOk").style.display = "none";
+  try {
+    await cf("/accounts/" + $("dmAcctSel").value + "/pages/projects/" + encodeURIComponent(proj) + "/domains", "POST", { name: host });
+    $("dmPgOk").style.display = "block"; $("dmPgOk").textContent = "已把 " + host + " 绑定到 Pages 项目 " + proj + "。";
+    $("dmPgHost").value = "";
+    loadPagesDomains($("dmAcctSel").value);
+  } catch (e) { showErr($("dmPgErr"), e); }
+});
+$("dmAcctSel").addEventListener("change", function(){ loadDomainTab(this.value); });
+$("dmPgSel").addEventListener("change", function(){ loadPagesDomains($("dmAcctSel").value); });
+
+/* ---------- 隧道 ---------- */
+var curTunnel = null;
+async function loadTunnels(acctId) {
+  var el = $("tnList");
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    var list = await cf("/accounts/" + acctId + "/cfd_tunnel?per_page=50");
+    if (!list.length) { el.innerHTML = '<p class="muted">该账号下暂无隧道。</p>'; return; }
+    el.innerHTML = list.map(function(t){
+      return '<div class="item"><div class="t mono">' + esc(t.name) + '</div>' +
+        '<div class="d mono">' + esc(t.id) + '</div>' +
+        '<div class="d">创建于 ' + fmtDate(t.created_at) + (t.status ? ' · ' + esc(t.status) : '') + '</div>' +
+        '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' +
+        '<button class="btn ghost small" onclick="showTunnelToken(\'' + t.id + '\')">Token</button>' +
+        '<button class="btn ghost small" onclick="showTunnelRoutes(\'' + t.id + '\',\'' + esc(t.name).replace(/\'/g,"\\'") + '\')">路由</button>' +
+        '<button class="btn danger small" onclick="delTunnel(\'' + t.id + '\',\'' + esc(t.name).replace(/\'/g,"\\'") + '\')">删除</button></div>' +
+        '<div class="mono" id="tnTok-' + t.id + '" style="margin-top:8px;word-break:break-all;display:none"></div></div>';
+    }).join("");
+  } catch (e) { el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>'; }
+}
+async function showTunnelToken(tunnelId) {
+  var box = $("tnTok-" + tunnelId);
+  if (!box) return;
+  box.style.display = "block"; box.textContent = "加载中…";
+  try {
+    var r = await cf("/accounts/" + $("tnAcctSel").value + "/cfd_tunnel/" + tunnelId + "/token");
+    var tok = (typeof r === "string") ? r : (r && r.token) || "";
+    box.textContent = tok ? ("cloudflared Token：" + tok) : "未取到 Token。";
+  } catch (e) { box.textContent = "获取失败：" + (e.message || e); }
+}
+async function showTunnelRoutes(tunnelId, name) {
+  curTunnel = { id: tunnelId, name: name };
+  $("tnRouteCard").classList.remove("hidden");
+  $("tnRouteTitle").textContent = "隧道路由（" + name + "）";
+  $("tnRouteErr").style.display = "none"; $("tnRouteOk").style.display = "none";
+  loadTunnelRoutes();
+}
+async function loadTunnelRoutes() {
+  if (!curTunnel) return;
+  var el = $("tnRouteList");
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    var list = await cf("/accounts/" + $("tnAcctSel").value + "/cfd_tunnel/" + curTunnel.id + "/routes");
+    if (!list.length) { el.innerHTML = '<p class="muted">该隧道暂无路由。</p>'; return; }
+    el.innerHTML = list.map(function(r){
+      var host = (r.dns && r.dns.hostname) || r.hostname || "";
+      var svc = (r.dns && r.dns.service) || r.service || "";
+      return '<div class="item"><div class="row"><div><div class="t mono">' + esc(host) + '</div>' +
+        '<div class="d">' + esc(r.type || "") + ' → ' + esc(svc) + '</div></div>' +
+        '<button class="btn danger small" onclick="delTunnelRoute(\'' + r.id + '\',\'' + esc(host).replace(/\'/g,"\\'") + '\')">删除</button></div></div>';
+    }).join("");
+  } catch (e) { el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>'; }
+}
+async function delTunnelRoute(routeId, host) {
+  if (!confirm("确定删除路由 " + host + " 吗？")) return;
+  try {
+    await cf("/accounts/" + $("tnAcctSel").value + "/cfd_tunnel/" + curTunnel.id + "/routes/" + routeId, "DELETE");
+    loadTunnelRoutes();
+  } catch (e) { showErr($("tnRouteErr"), e); }
+}
+async function delTunnel(tunnelId, name) {
+  if (!confirm("确定删除隧道「" + name + "」吗？它的路由也会一起删除。")) return;
+  try {
+    await cf("/accounts/" + $("tnAcctSel").value + "/cfd_tunnel/" + tunnelId, "DELETE");
+    if (curTunnel && curTunnel.id === tunnelId) { curTunnel = null; $("tnRouteCard").classList.add("hidden"); }
+    loadTunnels($("tnAcctSel").value);
+  } catch (e) { showErr($("tnErr"), e); }
+}
+$("tnCreateBtn").addEventListener("click", async function(){
+  var name = $("tnName").value.trim();
+  if (!name) { showErr($("tnErr"), "请先填写隧道名称。"); return; }
+  $("tnErr").style.display = "none"; $("tnOk").style.display = "none";
+  try {
+    var t = await cf("/accounts/" + $("tnAcctSel").value + "/cfd_tunnel", "POST", { name: name });
+    $("tnOk").style.display = "block"; $("tnOk").textContent = "已创建隧道「" + (t.name || name) + "」。点卡片上的 Token 可查看 cloudflared 用的 Token。";
+    $("tnName").value = "";
+    loadTunnels($("tnAcctSel").value);
+  } catch (e) { showErr($("tnErr"), e); }
+});
+$("tnRouteBtn").addEventListener("click", async function(){
+  if (!curTunnel) return;
+  var host = $("tnRouteHost").value.trim();
+  var svc = $("tnRouteSvc").value.trim();
+  if (!host || !svc) { showErr($("tnRouteErr"), "请填写公网域名和本地服务地址。"); return; }
+  $("tnRouteErr").style.display = "none"; $("tnRouteOk").style.display = "none";
+  try {
+    await cf("/accounts/" + $("tnAcctSel").value + "/cfd_tunnel/" + curTunnel.id + "/routes", "POST", { type: "dns", dns: { hostname: host, service: svc } });
+    $("tnRouteOk").style.display = "block"; $("tnRouteOk").textContent = "已添加路由：" + host + " → " + svc;
+    $("tnRouteHost").value = ""; $("tnRouteSvc").value = "";
+    loadTunnelRoutes();
+  } catch (e) { showErr($("tnRouteErr"), e); }
+});
+$("tnAcctSel").addEventListener("change", function(){ loadTunnels(this.value); });
 
 /* ---------- 用量 ---------- */
 async function cfGraphQL(query) {
