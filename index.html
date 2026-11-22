@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Cloudflare 账号管理</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans CJK SC", sans-serif; background: #f4f5f7; color: #1d1d1f; font-size: 15px; line-height: 1.5; }
+  header { background: #f6821f; color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 10; }
+  header h1 { font-size: 18px; font-weight: 700; }
+  header .sub { font-size: 12px; opacity: .9; margin-top: 2px; word-break: break-all; }
+  header .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  header button { background: rgba(255,255,255,.22); color: #fff; border: none; border-radius: 6px; padding: 5px 10px; font-size: 13px; white-space: nowrap; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 14px 12px 40px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { font-size: 16px; margin-bottom: 10px; }
+  .card h3 { font-size: 14px; margin: 14px 0 8px; }
+  .muted { color: #666; font-size: 13px; }
+  .small { font-size: 12px; color: #888; }
+  label { display: block; font-size: 13px; color: #555; margin: 10px 0 4px; }
+  input[type=text], input[type=password], select, textarea { width: 100%; padding: 10px 12px; font-size: 15px; border: 1px solid #d0d0d0; border-radius: 8px; background: #fff; }
+  input:focus, select:focus { outline: 2px solid #f6821f; border-color: #f6821f; }
+  button { cursor: pointer; }
+  .btn { display: inline-block; background: #f6821f; color: #fff; border: none; border-radius: 8px; padding: 11px 18px; font-size: 15px; font-weight: 600; margin-top: 12px; }
+  .btn:disabled { opacity: .5; }
+  .btn.ghost { background: #eee; color: #333; }
+  .btn.danger { background: #d93025; }
+  .btn.small { padding: 6px 10px; font-size: 13px; margin-top: 0; }
+  .err { display: none; background: #fdecea; color: #b3261e; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; word-break: break-word; }
+  .ok { display: none; background: #e6f4ea; color: #137333; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; }
+  .tabs button { flex: 1; min-width: 64px; border: 1px solid #ddd; background: #fff; border-radius: 9px; padding: 9px 4px; font-size: 14px; color: #333; white-space: nowrap; }
+  .tabs button.on { background: #f6821f; border-color: #f6821f; color: #fff; font-weight: 700; }
+  .item { border-top: 1px solid #eee; padding: 12px 2px; }
+  .item:first-of-type { border-top: none; }
+  .item .t { font-weight: 700; font-size: 15px; word-break: break-all; }
+  .item .d { font-size: 13px; color: #555; margin-top: 3px; word-break: break-all; }
+  .item .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 20px; background: #e8f0fe; color: #1967d2; margin-right: 4px; white-space: nowrap; }
+  .pill.green { background: #e6f4ea; color: #137333; }
+  .pill.red { background: #fdecea; color: #b3261e; }
+  .pill.grey { background: #f1f3f4; color: #5f6368; }
+  .pill.orange { background: #fef3e2; color: #b06000; }
+  .kv { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid #f1f1f1; font-size: 14px; }
+  .kv:first-of-type { border-top: none; }
+  .kv b { font-size: 16px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: #fafafa; border: 1px solid #eee; border-radius: 10px; padding: 12px; text-align: center; }
+  .stat .n { font-size: 20px; font-weight: 700; }
+  .stat .l { font-size: 12px; color: #666; margin-top: 2px; }
+  .bar-row { display: flex; align-items: flex-end; gap: 3px; height: 90px; margin: 8px 0 4px; }
+  .bar { flex: 1; background: #f6821f; border-radius: 3px 3px 0 0; min-height: 2px; }
+  .bar-lbl { display: flex; gap: 3px; font-size: 10px; color: #888; }
+  .bar-lbl span { flex: 1; text-align: center; }
+  .hidden { display: none !important; }
+  .loading { text-align: center; color: #888; padding: 24px 0; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; word-break: break-all; }
+  .perms { font-size: 13px; color: #444; }
+  .perms li { margin: 3px 0 3px 18px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .form-grid .full { grid-column: 1 / -1; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; }
+  .check input { width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <div>
+      <h1>Cloudflare 账号管理</h1>
+      <div class="sub" id="acctLine">未登录</div>
+    </div>
+    <button id="logoutBtn" class="hidden">退出</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- 登录 -->
+  <div id="loginView" class="card">
+    <h2>登录 Cloudflare</h2>
+    <p class="muted">使用 API Token 登录。Token 只保存在本机，不会上传到任何地方。</p>
+    <label for="tokenInput">API Token</label>
+    <input type="password" id="tokenInput" placeholder="粘贴你的 API Token" autocomplete="off">
+    <button class="btn" id="loginBtn">连接</button>
+    <div class="err" id="loginErr"></div>
+    <h3>去哪里创建 Token？</h3>
+    <p class="muted">打开 Cloudflare 控制台 → 右上角头像 → My Profile → API Tokens → Create Token → Create Custom Token，建议权限：</p>
+    <ul class="perms">
+      <li>Account · Cloudflare Pages · Read</li>
+      <li>Account · Cloudflare Pages · Edit（要部署 Pages 才需要）</li>
+      <li>Account · Workers Scripts · Read</li>
+      <li>Account · Workers Scripts · Edit（要部署 Workers 才需要）</li>
+      <li>Account · Account Settings · Read</li>
+      <li>Zone · Zone · Read</li>
+      <li>Zone · DNS · Edit（要改 DNS 记录才需要）</li>
+      <li>Zone · Analytics · Read（要看用量才需要）</li>
+    </ul>
+    <p class="small" style="margin-top:10px">也可以用 Global API Key 登录，本应用只支持 API Token 方式。</p>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="mainView" class="hidden">
+    <div class="tabs">
+      <button data-tab="zones" class="on">域名</button>
+      <button data-tab="dns">DNS</button>
+      <button data-tab="workers">Workers</button>
+      <button data-tab="pages">Pages</button>
+      <button data-tab="usage">用量</button>
+    </div>
+
+    <div id="tab-zones" class="tabpage">
+      <div class="card">
+        <h2>我的域名</h2>
+        <div id="zoneList"><div class="loading">加载中…</div></div>
+      </div>
+    </div>
+
+    <div id="tab-dns" class="tabpage hidden">
+      <div class="card">
+        <h2>DNS 记录</h2>
+        <label for="dnsZoneSel">选择域名</label>
+        <select id="dnsZoneSel"></select>
+        <div id="dnsList" style="margin-top:10px"><div class="loading">加载中…</div></div>
+      </div>
+      <div class="card">
+        <h2>添加记录</h2>
+        <div class="form-grid">
+          <div><label for="recType">类型</label>
+            <select id="recType"><option>A</option><option>AAAA</option><option>CNAME</option><option>TXT</option><option>MX</option><option>NS</option><option>SRV</option></select></div>
+          <div><label for="recTtl">TTL</label>
+            <select id="recTtl"><option value="1">自动</option><option value="60">1 分钟</option><option value="120">2 分钟</option><option value="300">5 分钟</option><option value="3600">1 小时</option><option value="86400">1 天</option></select></div>
+          <div class="full"><label for="recName">名称（@ 表示根域名，可留空）</label>
+            <input type="text" id="recName" placeholder="如 www，根域名留空"></div>
+          <div class="full"><label for="recContent">内容</label>
+            <input type="text" id="recContent" placeholder="IP 地址 / 目标域名 / 文本"></div>
+          <div class="full"><label for="recPriority">优先级（仅 MX / SRV）</label>
+            <input type="text" id="recPriority" placeholder="如 10，留空表示无"></div>
+        </div>
+        <label class="check"><input type="checkbox" id="recProxied" checked> 经过 Cloudflare 代理（小黄云，仅 A / AAAA / CNAME 有效）</label>
+        <button class="btn" id="addRecBtn">添加记录</button>
+        <div class="err" id="dnsErr"></div>
+        <div class="ok" id="dnsOk"></div>
+      </div>
+    </div>
+
+    <div id="tab-workers" class="tabpage hidden">
+      <div class="card">
+        <h2>Workers 脚本</h2>
+        <label for="wkAcctSel">选择账号</label>
+        <select id="wkAcctSel"></select>
+        <div id="wkList" style="margin-top:10px"><div class="loading">加载中…</div></div>
+      </div>
+      <div class="card">
+        <h2>部署 Worker</h2>
+        <p class="muted">粘贴代码直接部署。支持 ES Module 格式（export default）和 Service Worker 格式（addEventListener），会自动识别。需要 Token 有 Workers Scripts · Edit 权限。</p>
+        <label for="wkName">脚本名称（只能用小写字母、数字和 -）</label>
+        <input type="text" id="wkName" placeholder="如 my-worker" autocomplete="off">
+        <label for="wkCode">代码</label>
+        <textarea id="wkCode" rows="10" style="width:100%;padding:10px 12px;font-size:13px;border:1px solid #d0d0d0;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace" placeholder="export default {
+  async fetch(request) {
+    return new Response('Hello World!');
+  }
+}"></textarea>
+        <label class="check"><input type="checkbox" id="wkSubdomain" checked> 部署后开通 workers.dev 子域名</label>
+        <button class="btn" id="wkDeployBtn">部署</button>
+        <div class="err" id="wkErr"></div>
+        <div class="ok" id="wkOk"></div>
+      </div>
+    </div>
+
+    <div id="tab-pages" class="tabpage hidden">
+      <div class="card">
+        <h2>Pages 项目</h2>
+        <label for="pgAcctSel">选择账号</label>
+        <select id="pgAcctSel"></select>
+        <div id="pgList" style="margin-top:10px"><div class="loading">加载中…</div></div>
+      </div>
+      <div class="card hidden" id="pgDepCard">
+        <h2 id="pgDepTitle">部署记录</h2>
+        <div id="pgDepList"></div>
+      </div>
+      <div class="card">
+        <h2>新建 Pages 项目</h2>
+        <p class="muted">需要 Token 有 Cloudflare Pages · Edit 权限。项目建成后地址为 项目名.pages.dev。</p>
+        <label for="pgNewName">项目名称（只能用小写字母、数字和 -）</label>
+        <input type="text" id="pgNewName" placeholder="如 my-site" autocomplete="off">
+        <label for="pgNewBranch">生产分支</label>
+        <input type="text" id="pgNewBranch" value="main" autocomplete="off">
+        <button class="btn" id="pgCreateBtn">创建项目</button>
+        <div class="err" id="pgCreateErr"></div>
+        <div class="ok" id="pgCreateOk"></div>
+      </div>
+      <div class="card">
+        <h2>上传单个文件部署</h2>
+        <p class="muted">只支持单个文件（如 index.html），部署后该文件即为网站根目录下的同名文件。多文件整站请用电脑上的 Wrangler 或控制台拖拽上传。</p>
+        <label for="pgUpProjSel">选择项目</label>
+        <select id="pgUpProjSel"></select>
+        <label for="pgFileInput">选择文件</label>
+        <input type="file" id="pgFileInput" style="width:100%;padding:10px 0;font-size:14px">
+        <button class="btn" id="pgUploadBtn">上传并部署</button>
+        <div class="err" id="pgUpErr"></div>
+        <div class="ok" id="pgUpOk"></div>
+        <p class="small" id="pgUpStatus" style="margin-top:8px"></p>
+      </div>
+    </div>
+
+    <div id="tab-usage" class="tabpage hidden">
+      <div class="card">
+        <h2>用量统计</h2>
+        <label for="usZoneSel">选择域名</label>
+        <select id="usZoneSel"></select>
+        <label for="usRangeSel">时间范围</label>
+        <select id="usRangeSel">
+          <option value="1440">过去 24 小时</option>
+          <option value="10080" selected>过去 7 天</option>
+          <option value="43200">过去 30 天</option>
+        </select>
+        <button class="btn" id="usBtn">查看用量</button>
+        <div id="usResult" style="margin-top:14px"></div>
+        <div class="err" id="usErr"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var API = "https://api.cloudflare.com/client/v4";
+var token = localStorage.getItem("cf_token") || "";
+var zones = [];
+var accounts = [];
+var curTab = "zones";
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function fmtNum(n) { if (n == null || isNaN(n)) return "0"; if (n >= 1e9) return (n/1e9).toFixed(2) + " G"; if (n >= 1e6) return (n/1e6).toFixed(2) + " M"; if (n >= 1e3) return (n/1e3).toFixed(1) + " K"; return String(Math.round(n)); }
+function fmtBytes(n) { if (n == null || isNaN(n)) return "0 B"; var u = ["B","KB","MB","GB","TB"]; var i = 0; while (n >= 1024 && i < u.length-1) { n /= 1024; i++; } return n.toFixed(2) + " " + u[i]; }
+function fmtDate(s) { if (!s) return "-"; var d = new Date(s); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0") + " " + String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); }
+
+async function cf(path, method, body) {
+  var opt = { method: method || "GET", headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" } };
+  if (body) opt.body = JSON.stringify(body);
+  var r = await fetch(API + path, opt);
+  var j = await r.json().catch(function(){ return {}; });
+  if (!j.success) {
+    var m = (j.errors && j.errors[0] && j.errors[0].message) || ("请求失败（HTTP " + r.status + "）");
+    var e = new Error(m); e.status = r.status; throw e;
+  }
+  return j.result;
+}
+
+function showErr(el, err) {
+  el.style.display = "block";
+  el.textContent = err && err.message ? err.message : String(err);
+  if (err && err.status === 403) el.textContent += " —— Token 权限不足，请检查 API Token 的权限设置。";
+  if (err && err.status === 400) el.textContent += " —— 请求参数有误。";
+}
+
+function showView() {
+  var logged = !!token;
+  $("loginView").classList.toggle("hidden", logged);
+  $("mainView").classList.toggle("hidden", !logged);
+  $("logoutBtn").classList.toggle("hidden", !logged);
+}
+
+/* ---------- 登录 ---------- */
+async function doLogin() {
+  var t = $("tokenInput").value.trim();
+  if (!t) { showErr($("loginErr"), "请先粘贴 API Token。"); return; }
+  var btn = $("loginBtn"); btn.disabled = true; btn.textContent = "连接中…";
+  $("loginErr").style.display = "none";
+  token = t;
+  try {
+    await cf("/user/tokens/verify");
+    var me = await cf("/user");
+    localStorage.setItem("cf_token", token);
+    $("acctLine").textContent = me.email || "已登录";
+    showView();
+    await loadAll();
+  } catch (e) {
+    token = "";
+    showErr($("loginErr"), e);
+  }
+  btn.disabled = false; btn.textContent = "连接";
+}
+
+async function loadAll() {
+  try {
+    zones = await cf("/zones?per_page=50&order=name&direction=asc");
+    accounts = await cf("/accounts?per_page=50");
+  } catch (e) {
+    zones = []; accounts = [];
+    showErr($("loginErr"), e);
+  }
+  fillZoneSelects();
+  fillAcctSelects();
+  renderZones();
+  if (zones.length) loadDns(zones[0].id);
+  if (accounts.length) { loadWorkers(accounts[0].id); loadPages(accounts[0].id); }
+  if (zones.length) loadUsage();
+}
+
+function fillZoneSelects() {
+  var opts = zones.map(function(z){ return '<option value="' + z.id + '">' + esc(z.name) + '</option>'; }).join("");
+  $("dnsZoneSel").innerHTML = opts || '<option value="">（无域名）</option>';
+  $("usZoneSel").innerHTML = opts || '<option value="">（无域名）</option>';
+}
+function fillAcctSelects() {
+  var opts = accounts.map(function(a){ return '<option value="' + a.id + '">' + esc(a.name || a.id) + '</option>'; }).join("");
+  $("wkAcctSel").innerHTML = opts || '<option value="">（无账号）</option>';
+  $("pgAcctSel").innerHTML = opts || '<option value="">（无账号）</option>';
+}
+
+/* ---------- 标签页 ---------- */
+document.querySelectorAll(".tabs button").forEach(function(b){
+  b.addEventListener("click", function(){
+    document.querySelectorAll(".tabs button").forEach(function(x){ x.classList.remove("on"); });
+    b.classList.add("on");
+    curTab = b.getAttribute("data-tab");
+    document.querySelectorAll(".tabpage").forEach(function(p){ p.classList.add("hidden"); });
+    $("tab-" + curTab).classList.remove("hidden");
+  });
+});
+
+/* ---------- 域名 ---------- */
+function renderZones() {
+  var el = $("zoneList");
+  if (!zones.length) { el.innerHTML = '<p class="muted">没有找到域名。请检查 Token 是否有 Zone · Read 权限。</p>'; return; }
+  el.innerHTML = zones.map(function(z){
+    var status = z.status === "active" ? '<span class="pill green">正常</span>' : (z.paused ? '<span class="pill grey">已暂停</span>' : '<span class="pill orange">' + esc(z.status) + '</span>');
+    var plan = z.plan ? esc(z.plan.name) : "-";
+    return '<div class="item"><div class="row"><div><div class="t">' + esc(z.name) + '</div>' +
+      '<div class="d">套餐：' + plan + '　·　创建于 ' + fmtDate(z.created_on) + '</div>' +
+      '<div class="d">DNS：' + (z.name_servers || []).map(esc).join(", ") + '</div></div>' +
+      '<div>' + status + '</div></div></div>';
+  }).join("");
+}
+
+/* ---------- DNS ---------- */
+async function loadDns(zoneId) {
+  var el = $("dnsList");
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    var recs = await cf("/zones/" + zoneId + "/dns_records?per_page=100&order=type&direction=asc");
+    if (!recs.length) { el.innerHTML = '<p class="muted">该域名下暂无 DNS 记录。</p>'; return; }
+    el.innerHTML = recs.map(function(r){
+      var prox = r.proxied ? '<span class="pill orange">已代理</span>' : '<span class="pill grey">仅 DNS</span>';
+      return '<div class="item"><div class="row"><div><div class="t"><span class="pill">' + esc(r.type) + '</span> ' + esc(r.name) + '</div>' +
+        '<div class="d mono">' + esc(r.content) + '</div>' +
+        '<div class="d">TTL：' + (r.ttl === 1 ? "自动" : r.ttl + " 秒") + '　' + prox + '</div></div>' +
+        '<button class="btn danger small" onclick="delRecord(\'' + zoneId + '\',\'' + r.id + '\',\'' + esc(r.type) + ' ' + esc(r.name) + '\')">删除</button></div></div>';
+    }).join("");
+  } catch (e) {
+    el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
+  }
+}
+
+async function delRecord(zoneId, recId, label) {
+  if (!confirm("确定删除记录 " + label + " 吗？")) return;
+  try {
+    await cf("/zones/" + zoneId + "/dns_records/" + recId, "DELETE");
+    loadDns(zoneId);
+  } catch (e) { showErr($("dnsErr"), e); }
+}
+
+async function addRecord() {
+  var zoneId = $("dnsZoneSel").value;
+  var type = $("recType").value;
+  var name = $("recName").value.trim();
+  var content = $("recContent").value.trim();
+  var ttl = parseInt($("recTtl").value, 10);
+  var pri = $("recPriority").value.trim();
+  var proxied = $("recProxied").checked && (type === "A" || type === "AAAA" || type === "CNAME");
+  $("dnsErr").style.display = "none"; $("dnsOk").style.display = "none";
+  if (!zoneId) { showErr($("dnsErr"), "请先选择域名。"); return; }
+  if (!content) { showErr($("dnsErr"), "请填写记录内容。"); return; }
+  var body = { type: type, name: name, content: content, ttl: ttl, proxied: proxied };
+  if (pri !== "" && (type === "MX" || type === "SRV")) body.priority = parseInt(pri, 10);
+  try {
+    await cf("/zones/" + zoneId + "/dns_records", "POST", body);
+    $("dnsOk").style.display = "block"; $("dnsOk").textContent = "记录已添加。";
+    $("recName").value = ""; $("recContent").value = ""; $("recPriority").value = "";
+    loadDns(zoneId);
+  } catch (e) { showErr($("dnsErr"), e); }
+}
+
+$("dnsZoneSel").addEventListener("change", function(){ loadDns(this.value); });
+$("addRecBtn").addEventListener("click", addRecord);
+
+/* ---------- Workers ---------- */
+async function loadWorkers(acctId) {
+  var el = $("wkList");
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    var list = await cf("/accounts/" + acctId + "/workers/scripts?per_page=50");
+    if (!list.length) { el.innerHTML = '<p class="muted">该账号下暂无 Workers 脚本。</p>'; return; }
+    el.innerHTML = list.map(function(w){
+      return '<div class="item"><div class="t mono">' + esc(w.id) + '</div>' +
+        '<div class="d">修改于 ' + fmtDate(w.modified_on) + '　·　创建于 ' + fmtDate(w.created_on) + '</div>' +
+        '<div class="d">用量模式：' + esc(w.usage_model || "-") + '</div></div>';
+    }).join("");
+  } catch (e) {
+    el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
+  }
+}
+$("wkAcctSel").addEventListener("change", function(){ loadWorkers(this.value); });
+
+/* ---------- Pages ---------- */
+async function loadPages(acctId) {
+  var el = $("pgList");
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  $("pgDepCard").classList.add("hidden");
+  try {
+    var list = await cf("/accounts/" + acctId + "/pages/projects?per_page=50");
+    $("pgUpProjSel").innerHTML = list.map(function(p){ return '<option value="' + esc(p.name) + '">' + esc(p.name) + '</option>'; }).join("") || '<option value="">（无项目）</option>';
+    if (!list.length) { el.innerHTML = '<p class="muted">该账号下暂无 Pages 项目。</p>'; return; }
+    el.innerHTML = list.map(function(p){
+      var dep = p.latest_deployment;
+      var st = dep ? ('<span class="pill ' + (dep.status === "success" ? "green" : (dep.status === "failure" ? "red" : "orange")) + '">' + esc(dep.status || dep.latest_stage && dep.latest_stage.status || "-") + '</span>') : '<span class="pill grey">无部署</span>';
+      var url = (p.domains && p.domains[0]) ? esc(p.domains[0]) : (p.subdomain ? esc(p.subdomain) + ".pages.dev" : "-");
+      return '<div class="item"><div class="row"><div><div class="t">' + esc(p.name) + '</div>' +
+        '<div class="d mono">' + url + '</div>' +
+        '<div class="d">生产分支：' + esc(p.production_branch || "-") + '　·　创建于 ' + fmtDate(p.created_on) + '</div></div>' +
+        '<div>' + st + '</div></div>' +
+        '<button class="btn ghost small" style="margin-top:8px" onclick="loadDeployments(\'' + acctId + '\',\'' + esc(p.name) + '\')">查看部署记录</button></div>';
+    }).join("");
+  } catch (e) {
+    el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
+  }
+}
+$("pgAcctSel").addEventListener("change", function(){ loadPages(this.value); });
+
+async function loadDeployments(acctId, name) {
+  $("pgDepCard").classList.remove("hidden");
+  $("pgDepTitle").textContent = "部署记录 · " + name;
+  var el = $("pgDepList");
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    var list = await cf("/accounts/" + acctId + "/pages/projects/" + encodeURIComponent(name) + "/deployments?per_page=20");
+    if (!list.length) { el.innerHTML = '<p class="muted">暂无部署记录。</p>'; return; }
+    el.innerHTML = list.map(function(d){
+      var st = d.latest_stage ? d.latest_stage.status : "-";
+      var pill = st === "success" ? "green" : (st === "failure" ? "red" : "orange");
+      return '<div class="item"><div class="row"><div><div class="t mono">' + esc(d.url || d.id) + '</div>' +
+        '<div class="d">提交：' + esc((d.deployment_trigger && d.deployment_trigger.metadata && d.deployment_trigger.metadata.commit_message) || "-") + '</div>' +
+        '<div class="d">部署于 ' + fmtDate(d.created_on) + '</div></div>' +
+        '<span class="pill ' + pill + '">' + esc(st) + '</span></div>' +
+        '<button class="btn ghost small" style="margin-top:8px" onclick="retryDeployment(\'' + acctId + '\',\'' + esc(name) + '\',\'' + d.id + '\')">重新部署</button></div>';
+    }).join("");
+  } catch (e) {
+    el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
+  }
+}
+
+/* ---------- 用量 ---------- */
+async function loadUsage() {
+  var zoneId = $("usZoneSel").value;
+  var mins = parseInt($("usRangeSel").value, 10);
+  var el = $("usResult");
+  $("usErr").style.display = "none";
+  if (!zoneId) { el.innerHTML = '<p class="muted">暂无域名。</p>'; return; }
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    var r = await cf("/zones/" + zoneId + "/analytics/dashboard?since=-" + mins + "&until=0&continuous=true");
+    var t = r.totals || {};
+    var req = (t.requests && t.requests.all) || 0;
+    var cached = (t.requests && t.requests.cached) || 0;
+    var bw = (t.bandwidth && t.bandwidth.all) || 0;
+    var threats = (t.threats && t.threats.all) || 0;
+    var pv = (t.pageviews && t.pageviews.all) || 0;
+    var uniq = (t.uniques && t.uniques.all) || 0;
+    var html = '<div class="grid2">' +
+      '<div class="stat"><div class="n">' + fmtNum(req) + '</div><div class="l">总请求数</div></div>' +
+      '<div class="stat"><div class="n">' + (req ? Math.round(cached / req * 100) : 0) + '%</div><div class="l">缓存命中率</div></div>' +
+      '<div class="stat"><div class="n">' + fmtBytes(bw) + '</div><div class="l">总流量</div></div>' +
+      '<div class="stat"><div class="n">' + fmtNum(threats) + '</div><div class="l">拦截威胁</div></div>' +
+      '<div class="stat"><div class="n">' + fmtNum(pv) + '</div><div class="l">页面浏览</div></div>' +
+      '<div class="stat"><div class="n">' + fmtNum(uniq) + '</div><div class="l">独立访客</div></div></div>';
+    var ts = r.timeseries || [];
+    if (ts.length > 1) {
+      var vals = ts.map(function(p){ return (p.requests && p.requests.all) || 0; });
+      var max = Math.max.apply(null, vals.concat([1]));
+      var bars = vals.map(function(v){ return '<div class="bar" style="height:' + Math.max(2, Math.round(v / max * 100)) + '%"></div>'; }).join("");
+      var step = Math.max(1, Math.floor(ts.length / 7));
+      var lbls = ts.map(function(p, i){
+        if (i % step !== 0 && i !== ts.length - 1) return '<span></span>';
+        var d = new Date(p.since);
+        return '<span>' + (d.getMonth()+1) + '/' + d.getDate() + '</span>';
+      }).join("");
+      html += '<h3>请求数趋势</h3><div class="bar-row">' + bars + '</div><div class="bar-lbl">' + lbls + '</div>';
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '';
+    showErr($("usErr"), e);
+  }
+}
+$("usBtn").addEventListener("click", loadUsage);
+
+/* ---------- Workers 部署 ---------- */
+async function deployWorker() {
+  var acctId = $("wkAcctSel").value;
+  var name = $("wkName").value.trim();
+  var code = $("wkCode").value;
+  $("wkErr").style.display = "none"; $("wkOk").style.display = "none";
+  if (!acctId) { showErr($("wkErr"), "请先选择账号。"); return; }
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) { showErr($("wkErr"), "脚本名称只能用小写字母、数字和 -，且不能以 - 开头。"); return; }
+  if (!code.trim()) { showErr($("wkErr"), "请粘贴 Worker 代码。"); return; }
+  var btn = $("wkDeployBtn"); btn.disabled = true; btn.textContent = "部署中…";
+  try {
+    var isModule = /export\s+default|export\s*\{/.test(code);
+    var date = new Date().toISOString().slice(0, 10);
+    var fd = new FormData();
+    if (isModule) {
+      fd.append("metadata", new Blob([JSON.stringify({ main_module: "worker.js", compatibility_date: date, bindings: [] })], { type: "application/json" }));
+      fd.append("worker.js", new Blob([code], { type: "application/javascript+module" }), "worker.js");
+    } else {
+      fd.append("metadata", new Blob([JSON.stringify({ body_part: "worker.js", compatibility_date: date, bindings: [] })], { type: "application/json" }));
+      fd.append("worker.js", new Blob([code], { type: "application/javascript" }), "worker.js");
+    }
+    var r = await fetch(API + "/accounts/" + acctId + "/workers/scripts/" + encodeURIComponent(name), {
+      method: "PUT", headers: { "Authorization": "Bearer " + token }, body: fd
+    });
+    var j = await r.json().catch(function(){ return {}; });
+    if (!j.success) {
+      var m = (j.errors && j.errors[0] && j.errors[0].message) || ("部署失败（HTTP " + r.status + "）");
+      throw new Error(m);
+    }
+    var url = "";
+    if ($("wkSubdomain").checked) {
+      try {
+        await fetch(API + "/accounts/" + acctId + "/workers/scripts/" + encodeURIComponent(name) + "/subdomain", {
+          method: "PATCH", headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: true })
+        });
+        var sub = await cf("/accounts/" + acctId + "/workers/subdomain");
+        url = "https://" + name + "." + (sub.subdomain || "workers.dev") + "/";
+      } catch (e2) { /* 子域名开通失败不影响已部署的脚本 */ }
+    }
+    $("wkOk").style.display = "block";
+    $("wkOk").textContent = "部署成功。" + (url ? ("访问地址：" + url) : "");
+    loadWorkers(acctId);
+  } catch (e) { showErr($("wkErr"), e); }
+  btn.disabled = false; btn.textContent = "部署";
+}
+$("wkDeployBtn").addEventListener("click", deployWorker);
+
+/* ---------- Pages 新建项目 / 重试部署 ---------- */
+async function createPagesProject() {
+  var acctId = $("pgAcctSel").value;
+  var name = $("pgNewName").value.trim();
+  var branch = $("pgNewBranch").value.trim() || "main";
+  $("pgCreateErr").style.display = "none"; $("pgCreateOk").style.display = "none";
+  if (!acctId) { showErr($("pgCreateErr"), "请先选择账号。"); return; }
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) { showErr($("pgCreateErr"), "项目名称只能用小写字母、数字和 -，且不能以 - 开头。"); return; }
+  try {
+    var p = await cf("/accounts/" + acctId + "/pages/projects", "POST", { name: name, production_branch: branch });
+    $("pgCreateOk").style.display = "block";
+    $("pgCreateOk").textContent = "项目已创建，地址：" + (p.subdomain || name) + ".pages.dev";
+    $("pgNewName").value = "";
+    loadPages(acctId);
+  } catch (e) { showErr($("pgCreateErr"), e); }
+}
+$("pgCreateBtn").addEventListener("click", createPagesProject);
+
+async function retryDeployment(acctId, name, depId) {
+  try {
+    await cf("/accounts/" + acctId + "/pages/projects/" + encodeURIComponent(name) + "/deployments/" + depId + "/retry", "POST", {});
+    loadDeployments(acctId, name);
+  } catch (e) {
+    alert("重新部署失败：" + (e.message || e));
+  }
+}
+
+/* ---------- Pages 单文件上传部署 ---------- */
+async function sha256hex(buf) {
+  if (!window.crypto || !crypto.subtle) throw new Error("当前环境不支持加密计算，无法算文件哈希。");
+  var h = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(h)).map(function(b){ return b.toString(16).padStart(2, "0"); }).join("");
+}
+function fileToBase64(file) {
+  return new Promise(function(res, rej){
+    var fr = new FileReader();
+    fr.onload = function(){ res(String(fr.result).split(",")[1]); };
+    fr.onerror = function(){ rej(new Error("读取文件失败。")); };
+    fr.readAsDataURL(file);
+  });
+}
+function setUpStatus(t) { $("pgUpStatus").textContent = t || ""; }
+
+async function pollDeployment(acctId, name, depId) {
+  for (var i = 0; i < 20; i++) {
+    await new Promise(function(r){ setTimeout(r, 3000); });
+    try {
+      var d = await cf("/accounts/" + acctId + "/pages/projects/" + encodeURIComponent(name) + "/deployments/" + depId);
+      var st = d.latest_stage || {};
+      setUpStatus("部署状态：" + (st.name || "-") + " / " + (st.status || "-"));
+      if (st.name === "deploy" && st.status === "success") return d;
+      if (st.status === "failure" || st.status === "canceled") throw new Error("部署失败（" + (st.name || "") + " " + (st.status || "") + "）。");
+    } catch (e) { throw e; }
+  }
+  throw new Error("部署仍在进行中，稍后在部署记录里查看。");
+}
+
+async function uploadSingleFile() {
+  var acctId = $("pgAcctSel").value;
+  var name = $("pgUpProjSel").value;
+  var file = $("pgFileInput").files[0];
+  $("pgUpErr").style.display = "none"; $("pgUpOk").style.display = "none"; setUpStatus("");
+  if (!acctId || !name) { showErr($("pgUpErr"), "请先选择项目。"); return; }
+  if (!file) { showErr($("pgUpErr"), "请先选择要上传的文件。"); return; }
+  if (file.size > 25 * 1024 * 1024) { showErr($("pgUpErr"), "文件超过 25 MiB 上限。"); return; }
+  var btn = $("pgUploadBtn"); btn.disabled = true; btn.textContent = "上传中…";
+  try {
+    setUpStatus("正在计算文件哈希…");
+    var buf = await file.arrayBuffer();
+    var hash = await sha256hex(buf);
+    var path = "/" + file.name;
+    setUpStatus("正在获取上传凭证…");
+    var tok = await cf("/accounts/" + acctId + "/pages/projects/" + encodeURIComponent(name) + "/upload-token");
+    var jwt = tok.jwt;
+    if (!jwt) throw new Error("未取到上传凭证。");
+    var needUpload = true;
+    try {
+      var miss = await fetch(API + "/pages/assets/check-missing", {
+        method: "POST", headers: { "Authorization": "Bearer " + jwt, "Content-Type": "application/json" },
+        body: JSON.stringify({ hashes: [hash] })
+      }).then(function(r){ return r.json(); });
+      if (miss.success && miss.result && miss.result.indexOf(hash) === -1) needUpload = false;
+    } catch (e3) { needUpload = true; }
+    if (needUpload) {
+      setUpStatus("正在上传文件…");
+      var b64 = await fileToBase64(file);
+      var up = await fetch(API + "/pages/assets/upload", {
+        method: "POST", headers: { "Authorization": "Bearer " + jwt, "Content-Type": "application/json" },
+        body: JSON.stringify([{ key: hash, value: b64, metadata: { contentType: file.type || "application/octet-stream" }, base64: true }])
+      }).then(function(r){ return r.json(); });
+      if (!up.success && !(up.result && up.result.jwt)) throw new Error("文件上传失败。");
+    }
+    setUpStatus("正在创建部署…");
+    var manifest = {};
+    manifest[path] = hash;
+    var fd = new FormData();
+    fd.append("manifest", JSON.stringify(manifest));
+    var dep = await fetch(API + "/accounts/" + acctId + "/pages/projects/" + encodeURIComponent(name) + "/deployments", {
+      method: "POST", headers: { "Authorization": "Bearer " + token }, body: fd
+    }).then(function(r){ return r.json(); });
+    if (!dep.success) throw new Error((dep.errors && dep.errors[0] && dep.errors[0].message) || "创建部署失败。");
+    var depId = dep.result.id;
+    setUpStatus("部署创建成功，等待上线…");
+    var done = await pollDeployment(acctId, name, depId);
+    $("pgUpOk").style.display = "block";
+    $("pgUpOk").textContent = "部署成功，地址：" + (done.url || ("https://" + name + ".pages.dev"));
+    setUpStatus("");
+    loadDeployments(acctId, name);
+  } catch (e) { showErr($("pgUpErr"), e); setUpStatus(""); }
+  btn.disabled = false; btn.textContent = "上传并部署";
+}
+$("pgUploadBtn").addEventListener("click", uploadSingleFile);
+
+/* ---------- 入口 ---------- */
+$("loginBtn").addEventListener("click", doLogin);
+$("tokenInput").addEventListener("keydown", function(e){ if (e.key === "Enter") doLogin(); });
+$("logoutBtn").addEventListener("click", function(){
+  token = "";
+  localStorage.removeItem("cf_token");
+  $("tokenInput").value = "";
+  $("acctLine").textContent = "未登录";
+  showView();
+});
+
+if (token) {
+  (async function(){
+    try {
+      await cf("/user/tokens/verify");
+      var me = await cf("/user");
+      $("acctLine").textContent = me.email || "已登录";
+      showView();
+      await loadAll();
+    } catch (e) {
+      token = "";
+      localStorage.removeItem("cf_token");
+      showView();
+      showErr($("loginErr"), "保存的 Token 已失效，请重新登录。" + (e.message ? "（" + e.message + "）" : ""));
+    }
+  })();
+} else {
+  showView();
+}
+</script>
+</body>
+</html>
