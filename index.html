@@ -3,60 +3,106 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="color-scheme" content="light dark">
 <title>Cloudflare 账号管理</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans CJK SC", sans-serif; background: #f4f5f7; color: #1d1d1f; font-size: 15px; line-height: 1.5; }
-  header { background: #f6821f; color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 10; }
+  :root {
+    color-scheme: light dark;
+    --accent: #f6821f; --danger: #d93025;
+    --bg: #f4f5f7; --card: #fff; --text: #1d1d1f; --muted: #666; --small: #888;
+    --label: #555; --input-bg: #fff; --input-border: #d0d0d0; --input-text: #1d1d1f;
+    --border: #eee; --border-strong: #ddd; --ghost-bg: #eee; --ghost-text: #333;
+    --tab-bg: #fff; --tab-text: #333; --stat-bg: #fafafa; --stat-border: #eee;
+    --kv-border: #f1f1f1; --shadow: rgba(0,0,0,.08);
+    --err-bg: #fdecea; --err-text: #b3261e; --ok-bg: #e6f4ea; --ok-text: #137333;
+    --pill-blue-bg: #e8f0fe; --pill-blue-text: #1967d2;
+    --pill-green-bg: #e6f4ea; --pill-green-text: #137333;
+    --pill-red-bg: #fdecea; --pill-red-text: #b3261e;
+    --pill-grey-bg: #f1f3f4; --pill-grey-text: #5f6368;
+    --pill-orange-bg: #fef3e2; --pill-orange-text: #b06000;
+  }
+  /* 深色：默认跟随手机系统；手动选“深色”时用下面的 data-theme 规则 */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b1220; --card: #151f2e; --text: #e6e9ee; --muted: #9aa5b1; --small: #8a94a3;
+      --label: #b0b8c4; --input-bg: #1a2436; --input-border: #334155; --input-text: #e6e9ee;
+      --border: #2a3648; --border-strong: #334155; --ghost-bg: #243144; --ghost-text: #e6e9ee;
+      --tab-bg: #1a2436; --tab-text: #dbe2ea; --stat-bg: #1a2436; --stat-border: #2a3648;
+      --kv-border: #2a3648; --shadow: rgba(0,0,0,.45);
+      --err-bg: #3d1f1c; --err-text: #f28b82; --ok-bg: #1d3a28; --ok-text: #81c995;
+      --pill-blue-bg: #1e3a5f; --pill-blue-text: #8ab4f8;
+      --pill-green-bg: #1d3a28; --pill-green-text: #81c995;
+      --pill-red-bg: #4a1f1c; --pill-red-text: #f28b82;
+      --pill-grey-bg: #2a3648; --pill-grey-text: #bdc1c6;
+      --pill-orange-bg: #4a2f10; --pill-orange-text: #f9ab00;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b1220; --card: #151f2e; --text: #e6e9ee; --muted: #9aa5b1; --small: #8a94a3;
+    --label: #b0b8c4; --input-bg: #1a2436; --input-border: #334155; --input-text: #e6e9ee;
+    --border: #2a3648; --border-strong: #334155; --ghost-bg: #243144; --ghost-text: #e6e9ee;
+    --tab-bg: #1a2436; --tab-text: #dbe2ea; --stat-bg: #1a2436; --stat-border: #2a3648;
+    --kv-border: #2a3648; --shadow: rgba(0,0,0,.45);
+    --err-bg: #3d1f1c; --err-text: #f28b82; --ok-bg: #1d3a28; --ok-text: #81c995;
+    --pill-blue-bg: #1e3a5f; --pill-blue-text: #8ab4f8;
+    --pill-green-bg: #1d3a28; --pill-green-text: #81c995;
+    --pill-red-bg: #4a1f1c; --pill-red-text: #f28b82;
+    --pill-grey-bg: #2a3648; --pill-grey-text: #bdc1c6;
+    --pill-orange-bg: #4a2f10; --pill-orange-text: #f9ab00;
+  }
+  body { font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans CJK SC", sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; }
+  header { background: var(--accent); color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 10; }
   header h1 { font-size: 18px; font-weight: 700; }
   header .sub { font-size: 12px; opacity: .9; margin-top: 2px; word-break: break-all; }
   header .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
   header button { background: rgba(255,255,255,.22); color: #fff; border: none; border-radius: 6px; padding: 5px 10px; font-size: 13px; white-space: nowrap; }
+  header .hbtns { display: flex; gap: 6px; flex-shrink: 0; }
   .wrap { max-width: 760px; margin: 0 auto; padding: 14px 12px 40px; }
-  .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px var(--shadow); }
   .card h2 { font-size: 16px; margin-bottom: 10px; }
   .card h3 { font-size: 14px; margin: 14px 0 8px; }
-  .muted { color: #666; font-size: 13px; }
-  .small { font-size: 12px; color: #888; }
-  label { display: block; font-size: 13px; color: #555; margin: 10px 0 4px; }
-  input[type=text], input[type=password], select, textarea { width: 100%; padding: 10px 12px; font-size: 15px; border: 1px solid #d0d0d0; border-radius: 8px; background: #fff; }
-  input:focus, select:focus { outline: 2px solid #f6821f; border-color: #f6821f; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .small { font-size: 12px; color: var(--small); }
+  label { display: block; font-size: 13px; color: var(--label); margin: 10px 0 4px; }
+  input[type=text], input[type=password], select, textarea { width: 100%; padding: 10px 12px; font-size: 15px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--input-text); }
+  input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
   button { cursor: pointer; }
-  .btn { display: inline-block; background: #f6821f; color: #fff; border: none; border-radius: 8px; padding: 11px 18px; font-size: 15px; font-weight: 600; margin-top: 12px; }
+  .btn { display: inline-block; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 11px 18px; font-size: 15px; font-weight: 600; margin-top: 12px; }
   .btn:disabled { opacity: .5; }
-  .btn.ghost { background: #eee; color: #333; }
-  .btn.danger { background: #d93025; }
+  .btn.ghost { background: var(--ghost-bg); color: var(--ghost-text); }
+  .btn.danger { background: var(--danger); }
   .btn.small { padding: 6px 10px; font-size: 13px; margin-top: 0; }
-  .err { display: none; background: #fdecea; color: #b3261e; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; word-break: break-word; }
-  .ok { display: none; background: #e6f4ea; color: #137333; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
+  .err { display: none; background: var(--err-bg); color: var(--err-text); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; word-break: break-word; }
+  .ok { display: none; background: var(--ok-bg); color: var(--ok-text); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
   .tabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; }
-  .tabs button { flex: 1; min-width: 64px; border: 1px solid #ddd; background: #fff; border-radius: 9px; padding: 9px 4px; font-size: 14px; color: #333; white-space: nowrap; }
-  .tabs button.on { background: #f6821f; border-color: #f6821f; color: #fff; font-weight: 700; }
-  .item { border-top: 1px solid #eee; padding: 12px 2px; }
+  .tabs button { flex: 1; min-width: 64px; border: 1px solid var(--border-strong); background: var(--tab-bg); border-radius: 9px; padding: 9px 4px; font-size: 14px; color: var(--tab-text); white-space: nowrap; }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  .item { border-top: 1px solid var(--border); padding: 12px 2px; }
   .item:first-of-type { border-top: none; }
   .item .t { font-weight: 700; font-size: 15px; word-break: break-all; }
-  .item .d { font-size: 13px; color: #555; margin-top: 3px; word-break: break-all; }
+  .item .d { font-size: 13px; color: var(--label); margin-top: 3px; word-break: break-all; }
   .item .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-  .pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 20px; background: #e8f0fe; color: #1967d2; margin-right: 4px; white-space: nowrap; }
-  .pill.green { background: #e6f4ea; color: #137333; }
-  .pill.red { background: #fdecea; color: #b3261e; }
-  .pill.grey { background: #f1f3f4; color: #5f6368; }
-  .pill.orange { background: #fef3e2; color: #b06000; }
-  .kv { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid #f1f1f1; font-size: 14px; }
+  .pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 20px; background: var(--pill-blue-bg); color: var(--pill-blue-text); margin-right: 4px; white-space: nowrap; }
+  .pill.green { background: var(--pill-green-bg); color: var(--pill-green-text); }
+  .pill.red { background: var(--pill-red-bg); color: var(--pill-red-text); }
+  .pill.grey { background: var(--pill-grey-bg); color: var(--pill-grey-text); }
+  .pill.orange { background: var(--pill-orange-bg); color: var(--pill-orange-text); }
+  .kv { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--kv-border); font-size: 14px; }
   .kv:first-of-type { border-top: none; }
   .kv b { font-size: 16px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .stat { background: #fafafa; border: 1px solid #eee; border-radius: 10px; padding: 12px; text-align: center; }
+  .stat { background: var(--stat-bg); border: 1px solid var(--stat-border); border-radius: 10px; padding: 12px; text-align: center; }
   .stat .n { font-size: 20px; font-weight: 700; }
-  .stat .l { font-size: 12px; color: #666; margin-top: 2px; }
+  .stat .l { font-size: 12px; color: var(--muted); margin-top: 2px; }
   .bar-row { display: flex; align-items: flex-end; gap: 3px; height: 90px; margin: 8px 0 4px; }
-  .bar { flex: 1; background: #f6821f; border-radius: 3px 3px 0 0; min-height: 2px; }
-  .bar-lbl { display: flex; gap: 3px; font-size: 10px; color: #888; }
+  .bar { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+  .bar-lbl { display: flex; gap: 3px; font-size: 10px; color: var(--small); }
   .bar-lbl span { flex: 1; text-align: center; }
   .hidden { display: none !important; }
-  .loading { text-align: center; color: #888; padding: 24px 0; }
+  .loading { text-align: center; color: var(--small); padding: 24px 0; }
   .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; word-break: break-all; }
-  .perms { font-size: 13px; color: #444; }
+  .perms { font-size: 13px; color: var(--label); }
   .perms li { margin: 3px 0 3px 18px; }
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
   .form-grid .full { grid-column: 1 / -1; }
@@ -71,7 +117,7 @@
       <h1>Cloudflare 账号管理</h1>
       <div class="sub" id="acctLine">未登录</div>
     </div>
-    <button id="logoutBtn" class="hidden">退出</button>
+    <div class="hbtns"><button id="themeBtn" title="切换主题">跟随系统</button><button id="logoutBtn" class="hidden">退出</button></div>
   </div>
 </header>
 
@@ -657,6 +703,22 @@ async function uploadSingleFile() {
   btn.disabled = false; btn.textContent = "上传并部署";
 }
 $("pgUploadBtn").addEventListener("click", uploadSingleFile);
+
+/* ---------- 主题：默认跟随手机系统（浅色/深色），点右上角可手动切换 ---------- */
+var THEME_KEY = "cf_theme";
+function applyTheme(mode) {
+  if (mode === "dark") document.documentElement.setAttribute("data-theme", "dark");
+  else if (mode === "light") document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+  $("themeBtn").textContent = mode === "dark" ? "深色" : mode === "light" ? "浅色" : "跟随系统";
+}
+var themeMode = localStorage.getItem(THEME_KEY) || "auto";
+applyTheme(themeMode);
+$("themeBtn").addEventListener("click", function() {
+  themeMode = themeMode === "auto" ? "light" : themeMode === "light" ? "dark" : "auto";
+  localStorage.setItem(THEME_KEY, themeMode);
+  applyTheme(themeMode);
+});
 
 /* ---------- 入口 ---------- */
 $("loginBtn").addEventListener("click", doLogin);
