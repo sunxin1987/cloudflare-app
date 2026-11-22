@@ -274,9 +274,8 @@ async function doLogin() {
   token = t;
   try {
     await cf("/user/tokens/verify");
-    var me = await cf("/user");
     localStorage.setItem("cf_token", token);
-    $("acctLine").textContent = me.email || "已登录";
+    $("acctLine").textContent = "已登录";
     showView();
     await loadAll();
   } catch (e) {
@@ -674,8 +673,7 @@ if (token) {
   (async function(){
     try {
       await cf("/user/tokens/verify");
-      var me = await cf("/user");
-      $("acctLine").textContent = me.email || "已登录";
+      $("acctLine").textContent = "已登录";
       showView();
       await loadAll();
     } catch (e) {
