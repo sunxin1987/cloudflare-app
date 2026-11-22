@@ -208,9 +208,14 @@
       </div>
       <div class="card hidden" id="wkCodeCard">
         <h2 id="wkCodeTitle">Worker 代码</h2>
-        <textarea id="wkCodeText" rows="16" readonly style="width:100%;padding:10px 12px;font-size:12px;border:1px solid #d0d0d0;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace"></textarea>
-        <button class="btn ghost" id="wkCodeCloseBtn" style="margin-top:8px">关闭</button>
+        <textarea id="wkCodeText" rows="16" style="width:100%;padding:10px 12px;font-size:12px;border:1px solid #d0d0d0;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn" id="wkCodeSaveBtn">保存并部署</button>
+          <button class="btn ghost" id="wkCodeCloseBtn">关闭</button>
+        </div>
         <div class="err" id="wkCodeErr"></div>
+        <div class="ok" id="wkCodeOk"></div>
+        <p class="small" style="margin-top:8px">保存时会重新部署该 Worker，原有的绑定（KV、变量等）会原样保留。</p>
       </div>
       <div class="card">
         <h2>部署 Worker</h2>
@@ -585,18 +590,59 @@ function extractScriptCode(txt) {
   if (end !== -1) body = body.slice(0, end);
   return body.replace(/\s+$/, "");
 }
+var curCodeWorker = null;
 async function showWorkerCode(acctId, name) {
+  curCodeWorker = { acctId: acctId, name: name };
   $("wkCodeCard").classList.remove("hidden");
   $("wkCodeTitle").textContent = "Worker 代码 · " + name;
   $("wkCodeText").value = "加载中…";
-  $("wkCodeErr").style.display = "none";
+  $("wkCodeErr").style.display = "none"; $("wkCodeOk").style.display = "none";
   try {
     var r = await fetch(API + "/accounts/" + acctId + "/workers/scripts/" + encodeURIComponent(name), { headers: { "Authorization": "Bearer " + token } });
     if (!r.ok) throw new Error("读取失败（HTTP " + r.status + "）");
     $("wkCodeText").value = extractScriptCode(await r.text());
   } catch (e) { showErr($("wkCodeErr"), e); $("wkCodeText").value = ""; }
 }
-$("wkCodeCloseBtn").addEventListener("click", function(){ $("wkCodeCard").classList.add("hidden"); });
+$("wkCodeCloseBtn").addEventListener("click", function(){ $("wkCodeCard").classList.add("hidden"); curCodeWorker = null; });
+async function saveWorkerCode() {
+  if (!curCodeWorker) return;
+  var code = $("wkCodeText").value;
+  if (!code.trim()) { showErr($("wkCodeErr"), "代码不能为空。"); return; }
+  if (!confirm("确定保存并重新部署 Worker「" + curCodeWorker.name + "」吗？")) return;
+  $("wkCodeErr").style.display = "none"; $("wkCodeOk").style.display = "none";
+  var btn = $("wkCodeSaveBtn"); btn.disabled = true; btn.textContent = "保存中…";
+  try {
+    var settings = await cf("/accounts/" + curCodeWorker.acctId + "/workers/scripts/" + encodeURIComponent(curCodeWorker.name) + "/settings");
+    var isModule = /export\s+default|export\s*\{/.test(code);
+    var meta = { bindings: [] };
+    if (settings) {
+      ["bindings", "compatibility_date", "compatibility_flags", "placement", "tags", "usage_model"].forEach(function(k){
+        if (settings[k] !== undefined && settings[k] !== null) meta[k] = settings[k];
+      });
+    }
+    var fd = new FormData();
+    if (isModule) {
+      meta.main_module = "worker.js";
+      fd.append("worker.js", new Blob([code], { type: "application/javascript+module" }), "worker.js");
+    } else {
+      meta.body_part = "worker.js";
+      fd.append("worker.js", new Blob([code], { type: "application/javascript" }), "worker.js");
+    }
+    fd.append("metadata", new Blob([JSON.stringify(meta)], { type: "application/json" }));
+    var r = await fetch(API + "/accounts/" + curCodeWorker.acctId + "/workers/scripts/" + encodeURIComponent(curCodeWorker.name), {
+      method: "PUT", headers: { "Authorization": "Bearer " + token }, body: fd
+    });
+    var j = await r.json().catch(function(){ return {}; });
+    if (!j.success) {
+      var m = (j.errors && j.errors[0] && j.errors[0].message) || ("保存失败（HTTP " + r.status + "）");
+      throw new Error(m);
+    }
+    $("wkCodeOk").style.display = "block"; $("wkCodeOk").textContent = "已保存并重新部署。";
+    loadWorkers(curCodeWorker.acctId);
+  } catch (e) { showErr($("wkCodeErr"), e); }
+  btn.disabled = false; btn.textContent = "保存并部署";
+}
+$("wkCodeSaveBtn").addEventListener("click", saveWorkerCode);
 $("wkAcctSel").addEventListener("change", function(){ loadWorkers(this.value); });
 
 /* ---------- Pages ---------- */
