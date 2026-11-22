@@ -83,6 +83,10 @@
   .item .t { font-weight: 700; font-size: 15px; word-break: break-all; }
   .item .d { font-size: 13px; color: var(--label); margin-top: 3px; word-break: break-all; }
   .item .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .zn-menu { position: absolute; right: 0; top: 34px; z-index: 5; background: var(--card); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 16px var(--shadow); min-width: 120px; overflow: hidden; }
+  .zn-menu-item { padding: 10px 14px; font-size: 14px; color: var(--text); border-top: 1px solid var(--border); }
+  .zn-menu-item:first-child { border-top: none; }
+  .zn-menu-item.danger { color: var(--danger); }
   .pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 20px; background: var(--pill-blue-bg); color: var(--pill-blue-text); margin-right: 4px; white-space: nowrap; }
   .pill.green { background: var(--pill-green-bg); color: var(--pill-green-text); }
   .pill.red { background: var(--pill-red-bg); color: var(--pill-red-text); }
@@ -166,8 +170,27 @@
 
     <div id="tab-zones" class="tabpage">
       <div class="card">
-        <h2>我的域名</h2>
-        <div id="zoneList"><div class="loading">加载中…</div></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <h2 style="margin:0">域名</h2>
+          <a class="btn ghost small" href="https://developers.cloudflare.com/dns/" style="text-decoration:none">查看文档</a>
+        </div>
+        <p class="muted" style="margin-top:6px">加速并保护您的站点和应用程序</p>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <input type="text" id="znSearch" placeholder="按域名搜索…" autocomplete="off" style="flex:1;min-width:0;margin-top:0">
+          <button class="btn" id="znAddBtn" style="margin-top:0;white-space:nowrap">添加域名</button>
+        </div>
+        <div id="znAddForm" style="display:none;margin-top:10px">
+          <label for="znNewName">域名（例如 example.com）</label>
+          <input type="text" id="znNewName" placeholder="example.com" autocomplete="off">
+          <p class="small" style="margin-top:6px">添加后需把域名的 NS 改成 Cloudflare 给的地址，状态才会变“活动”。</p>
+          <div style="display:flex;gap:8px">
+            <button class="btn" id="znAddConfirmBtn">确认添加</button>
+            <button class="btn ghost" id="znAddCancelBtn">取消</button>
+          </div>
+          <div class="err" id="znAddErr"></div>
+          <div class="ok" id="znAddOk"></div>
+        </div>
+        <div id="zoneList" style="margin-top:10px"><div class="loading">加载中…</div></div>
       </div>
     </div>
 
@@ -455,6 +478,7 @@ async function loadAll() {
   fillZoneSelects();
   fillAcctSelects();
   renderZones();
+  loadZnStats();
   if (zones.length) loadDns(zones[0].id);
   if (accounts.length) { loadWorkers(accounts[0].id); loadPages(accounts[0].id); loadKv(accounts[0].id); loadDomainTab(accounts[0].id); loadTunnels(accounts[0].id); }
   if (zones.length) loadUsage();
@@ -486,18 +510,119 @@ document.querySelectorAll(".tabs button").forEach(function(b){
 });
 
 /* ---------- 域名 ---------- */
+var znStats = {};
+var znFilter = "";
+function sparkSVG(vals) {
+  var w = 96, h = 30, pad = 2;
+  if (!vals || !vals.length) return "";
+  var max = Math.max.apply(null, vals.concat([1]));
+  var pts = vals.map(function(v, i){
+    var x = pad + i * (w - 2 * pad) / Math.max(1, vals.length - 1);
+    var y = h - pad - (v / max) * (h - 2 * pad);
+    return x.toFixed(1) + "," + y.toFixed(1);
+  }).join(" ");
+  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="flex-shrink:0"><polyline points="' + pts + '" fill="none" stroke="#2f7cf6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+}
 function renderZones() {
   var el = $("zoneList");
   if (!zones.length) { el.innerHTML = '<p class="muted">没有找到域名。请检查 Token 是否有 Zone · Read 权限。</p>'; return; }
-  el.innerHTML = zones.map(function(z){
-    var status = z.status === "active" ? '<span class="pill green">正常</span>' : (z.paused ? '<span class="pill grey">已暂停</span>' : '<span class="pill orange">' + esc(z.status) + '</span>');
-    var plan = z.plan ? esc(z.plan.name) : "-";
-    return '<div class="item"><div class="row"><div><div class="t">' + esc(z.name) + '</div>' +
-      '<div class="d">套餐：' + plan + '　·　创建于 ' + fmtDate(z.created_on) + '</div>' +
-      '<div class="d">DNS：' + (z.name_servers || []).map(esc).join(", ") + '</div></div>' +
-      '<div>' + status + '</div></div></div>';
+  var list = zones.filter(function(z){ return !znFilter || z.name.toLowerCase().indexOf(znFilter) !== -1; });
+  if (!list.length) { el.innerHTML = '<p class="muted">没有匹配的域名。</p>'; return; }
+  el.innerHTML = list.map(function(z){
+    var status = z.status === "active" ? '<span class="pill green">✓ 活动</span>' : (z.paused ? '<span class="pill grey">已暂停</span>' : '<span class="pill orange">' + esc(z.status) + '</span>');
+    var st = znStats[z.id];
+    var statHtml;
+    if (!st) {
+      statHtml = '<div class="d">7 天用量加载中…</div>';
+    } else if (!st.uniques.length) {
+      statHtml = '<div class="d" style="margin-top:6px"><span class="pill">' + fmtNum(st.threats) + ' 威胁已拦截</span></div><div class="d">过去 7 天无流量。</div>';
+    } else {
+      statHtml = '<div style="margin-top:8px;display:flex;align-items:center;gap:8px">' + sparkSVG(st.uniques) +
+        '<div><div class="t" style="font-size:14px">' + fmtNum(st.uniqTotal) + '</div><div class="d" style="margin-top:0">唯一访问者（7 天）</div></div></div>' +
+        '<div style="margin-top:6px"><span class="pill">' + fmtNum(st.threats) + ' 威胁已拦截</span></div>';
+    }
+    return '<div class="item"><div class="row"><div style="min-width:0"><div class="t">' + esc(z.name) + '</div>' +
+      '<div style="margin-top:5px">' + status + '</div>' + statHtml + '</div>' +
+      '<div style="position:relative;flex-shrink:0"><button class="btn ghost small" onclick="toggleZnMenu(\'' + z.id + '\')">···</button>' +
+      '<div class="zn-menu" id="znMenu-' + z.id + '" style="display:none">' +
+      '<div class="zn-menu-item" onclick="gotoDns(\'' + z.id + '\')">DNS 管理</div>' +
+      '<div class="zn-menu-item danger" onclick="delZone(\'' + z.id + '\',\'' + esc(z.name) + '\')">删除域名</div></div></div></div></div>';
   }).join("");
 }
+async function loadZnStats() {
+  if (!zones.length) return;
+  try {
+    var now = new Date();
+    var start = new Date(now.getTime() - 7 * 24 * 3600000);
+    function ymd(d) { return d.toISOString().slice(0, 10); }
+    var filter = '{date_gt: "' + ymd(start) + '", date_leq: "' + ymd(now) + '"}';
+    var fields = '{ dimensions { date } sum { threats } uniq { uniques } }';
+    var parts = zones.map(function(z, i) {
+      return 'z' + i + ': zones(filter: {zoneTag: "' + z.id + '"}) { httpRequests1dGroups(limit: 32, filter: ' + filter + ') ' + fields + ' }';
+    }).join(" ");
+    var data = await cfGraphQL('query { viewer { ' + parts + ' } }');
+    zones.forEach(function(z, i) {
+      var arr = (data.viewer && data.viewer["z" + i]) || [];
+      var gs = sortGroups(((arr[0] || {}).httpRequests1dGroups) || []);
+      var uniques = gs.map(function(g){ return (((g.uniq || {}).uniques) || 0); });
+      var threats = 0;
+      gs.forEach(function(g){ threats += (((g.sum || {}).threats) || 0); });
+      var uniqTotal = 0;
+      uniques.forEach(function(u){ uniqTotal += u; });
+      znStats[z.id] = { uniques: uniques, uniqTotal: uniqTotal, threats: threats };
+    });
+    renderZones();
+  } catch (e) { /* 用量加载失败不影响域名列表 */ }
+}
+function toggleZnMenu(zoneId) {
+  document.querySelectorAll(".zn-menu").forEach(function(m){
+    if (m.id !== "znMenu-" + zoneId) m.style.display = "none";
+  });
+  var m = $("znMenu-" + zoneId);
+  if (m) m.style.display = (m.style.display === "none") ? "block" : "none";
+}
+function gotoDns(zoneId) {
+  $("dnsZoneSel").value = zoneId;
+  loadDns(zoneId);
+  document.querySelector('.tabs button[data-tab="dns"]').click();
+}
+async function delZone(zoneId, name) {
+  if (!confirm("确定删除域名「" + name + "」吗？该域名下的 DNS 记录会一起删除，不可恢复。")) return;
+  try {
+    await cf("/zones/" + zoneId, "DELETE");
+    zones = zones.filter(function(z){ return z.id !== zoneId; });
+    delete znStats[zoneId];
+    fillZoneSelects();
+    renderZones();
+    if (zones.length) loadDns(zones[0].id);
+  } catch (e) { alert("删除失败：" + (e.message || e)); }
+}
+$("znSearch").addEventListener("input", function(){ znFilter = this.value.trim().toLowerCase(); renderZones(); });
+$("znAddBtn").addEventListener("click", function(){
+  $("znAddForm").style.display = "block";
+  $("znAddErr").style.display = "none"; $("znAddOk").style.display = "none";
+});
+$("znAddCancelBtn").addEventListener("click", function(){ $("znAddForm").style.display = "none"; });
+$("znAddConfirmBtn").addEventListener("click", async function(){
+  var name = $("znNewName").value.trim().toLowerCase();
+  $("znAddErr").style.display = "none"; $("znAddOk").style.display = "none";
+  if (!accounts.length) { showErr($("znAddErr"), "没有可用账号。"); return; }
+  if (!/^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$/.test(name)) { showErr($("znAddErr"), "域名格式不对，例如 example.com。"); return; }
+  var btn = $("znAddConfirmBtn"); btn.disabled = true; btn.textContent = "添加中…";
+  try {
+    var z = await cf("/zones", "POST", { name: name, account: { id: accounts[0].id }, type: "full" });
+    $("znAddOk").style.display = "block";
+    $("znAddOk").textContent = "已添加 " + name + "，请把域名的 NS 改成：" + ((z.name_servers || []).join("、") || "（见控制台）");
+    $("znNewName").value = "";
+    zones = await cf("/zones?per_page=50&order=name&direction=asc");
+    fillZoneSelects(); renderZones(); loadZnStats();
+  } catch (e) {
+    var msg = e.message || e;
+    if (/permission/i.test(String(msg))) msg = "Token 缺少 Zone · Edit 权限：请在 Cloudflare 控制台的 API Tokens 里给当前 Token 加上 Zone · Edit，再回来添加。";
+    showErr($("znAddErr"), msg);
+  }
+  btn.disabled = false; btn.textContent = "确认添加";
+});
 
 /* ---------- DNS ---------- */
 async function loadDns(zoneId) {
