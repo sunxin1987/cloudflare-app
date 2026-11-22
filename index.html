@@ -745,21 +745,41 @@ async function loadTunnelRoutes() {
   var el = $("tnRouteList");
   el.innerHTML = '<div class="loading">加载中…</div>';
   try {
-    var list = await cf("/accounts/" + $("tnAcctSel").value + "/cfd_tunnel/" + curTunnel.id + "/routes");
+    var acctId = $("tnAcctSel").value;
+    var list = await cf("/accounts/" + acctId + "/zerotrust/routes/hostname?tunnel_id=" + curTunnel.id);
+    var svcByHost = {};
+    try {
+      var cfgRes = await cf("/accounts/" + acctId + "/cfd_tunnel/" + curTunnel.id + "/configurations");
+      var ing = ((cfgRes && cfgRes.config) || {}).ingress || [];
+      ing.forEach(function(rule){ if (rule.hostname) svcByHost[rule.hostname] = rule.service; });
+    } catch (e2) { /* 配置读不到就只显示域名 */ }
     if (!list.length) { el.innerHTML = '<p class="muted">该隧道暂无路由。</p>'; return; }
     el.innerHTML = list.map(function(r){
-      var host = (r.dns && r.dns.hostname) || r.hostname || "";
-      var svc = (r.dns && r.dns.service) || r.service || "";
+      var host = r.hostname || "";
+      var svc = svcByHost[host] || "";
       return '<div class="item"><div class="row"><div><div class="t mono">' + esc(host) + '</div>' +
-        '<div class="d">' + esc(r.type || "") + ' → ' + esc(svc) + '</div></div>' +
+        '<div class="d">' + (svc ? '→ ' + esc(svc) : '未在隧道配置里设服务') + '</div></div>' +
         '<button class="btn danger small" onclick="delTunnelRoute(\'' + r.id + '\',\'' + esc(host).replace(/\'/g,"\\'") + '\')">删除</button></div></div>';
     }).join("");
   } catch (e) { el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>'; }
 }
+/* 改某域名在隧道配置（ingress）里的服务地址；service 为 null 表示删掉该域名这条规则 */
+async function updateTunnelIngress(acctId, tunnelId, host, service) {
+  var cfgRes = await cf("/accounts/" + acctId + "/cfd_tunnel/" + tunnelId + "/configurations");
+  var cfg = (cfgRes && cfgRes.config) || {};
+  var ing = cfg.ingress || [];
+  ing = ing.filter(function(rule){ return rule.hostname !== host; });
+  if (service) ing.unshift({ hostname: host, service: service });
+  if (!ing.some(function(rule){ return !rule.hostname && !rule.path; })) ing.push({ service: "http_status:404" });
+  cfg.ingress = ing;
+  await cf("/accounts/" + acctId + "/cfd_tunnel/" + tunnelId + "/configurations", "PUT", { config: cfg });
+}
 async function delTunnelRoute(routeId, host) {
   if (!confirm("确定删除路由 " + host + " 吗？")) return;
   try {
-    await cf("/accounts/" + $("tnAcctSel").value + "/cfd_tunnel/" + curTunnel.id + "/routes/" + routeId, "DELETE");
+    var acctId = $("tnAcctSel").value;
+    await cf("/accounts/" + acctId + "/zerotrust/routes/hostname/" + routeId, "DELETE");
+    try { await updateTunnelIngress(acctId, curTunnel.id, host, null); } catch (e2) { /* 路由已删，配置没改上不致命 */ }
     loadTunnelRoutes();
   } catch (e) { showErr($("tnRouteErr"), e); }
 }
@@ -789,7 +809,16 @@ $("tnRouteBtn").addEventListener("click", async function(){
   if (!host || !svc) { showErr($("tnRouteErr"), "请填写公网域名和本地服务地址。"); return; }
   $("tnRouteErr").style.display = "none"; $("tnRouteOk").style.display = "none";
   try {
-    await cf("/accounts/" + $("tnAcctSel").value + "/cfd_tunnel/" + curTunnel.id + "/routes", "POST", { type: "dns", dns: { hostname: host, service: svc } });
+    var acctId = $("tnAcctSel").value;
+    await cf("/accounts/" + acctId + "/zerotrust/routes/hostname", "POST", { hostname: host, tunnel_id: curTunnel.id });
+    try {
+      await updateTunnelIngress(acctId, curTunnel.id, host, svc);
+    } catch (e2) {
+      $("tnRouteOk").style.display = "block"; $("tnRouteOk").textContent = "路由已创建，但隧道配置没改上（" + (e2.message || e2) + "），请在控制台里给 " + host + " 设一下服务地址。";
+      $("tnRouteHost").value = ""; $("tnRouteSvc").value = "";
+      loadTunnelRoutes();
+      return;
+    }
     $("tnRouteOk").style.display = "block"; $("tnRouteOk").textContent = "已添加路由：" + host + " → " + svc;
     $("tnRouteHost").value = ""; $("tnRouteSvc").value = "";
     loadTunnelRoutes();
