@@ -500,6 +500,20 @@ async function loadDeployments(acctId, name) {
 }
 
 /* ---------- 用量 ---------- */
+async function cfGraphQL(query) {
+  var res = await fetch(API + "/graphql", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ query: query })
+  });
+  var j = await res.json().catch(function(){ return {}; });
+  if (j.errors && j.errors.length) {
+    var e = new Error(j.errors[0].message); e.status = res.status; throw e;
+  }
+  if (!j.data) { var e2 = new Error("GraphQL 无返回数据（HTTP " + res.status + "）"); e2.status = res.status; throw e2; }
+  return j.data;
+}
+
 async function loadUsage() {
   var zoneId = $("usZoneSel").value;
   var mins = parseInt($("usRangeSel").value, 10);
@@ -508,30 +522,50 @@ async function loadUsage() {
   if (!zoneId) { el.innerHTML = '<p class="muted">暂无域名。</p>'; return; }
   el.innerHTML = '<div class="loading">加载中…</div>';
   try {
-    var r = await cf("/zones/" + zoneId + "/analytics/dashboard?since=-" + mins + "&until=0&continuous=true");
-    var t = r.totals || {};
-    var req = (t.requests && t.requests.all) || 0;
-    var cached = (t.requests && t.requests.cached) || 0;
-    var bw = (t.bandwidth && t.bandwidth.all) || 0;
-    var threats = (t.threats && t.threats.all) || 0;
-    var pv = (t.pageviews && t.pageviews.all) || 0;
-    var uniq = (t.uniques && t.uniques.all) || 0;
+    // 旧版 Zone Analytics REST 接口已下线，改用 GraphQL Analytics API。
+    // 24 小时用小时分组，7/30 天用天分组；返回的分组不保证按时间排序，先排好序。
+    var hourly = mins <= 1440;
+    var now = new Date();
+    var start = new Date(now.getTime() - mins * 60000);
+    function iso(d) { return d.toISOString().replace(/\.\d+Z$/, "Z"); }
+    function ymd(d) { return d.toISOString().slice(0, 10); }
+    var q;
+    if (hourly) {
+      q = 'query { viewer { zones(filter: {zoneTag: "' + zoneId + '"}) { httpRequests1hGroups(limit: 25, filter: {datetime_gt: "' + iso(start) + '", datetime_lt: "' + iso(now) + '"}) { dimensions { datetime } sum { requests cachedRequests bytes threats pageViews } uniq { uniques } } } } }';
+    } else {
+      q = 'query { viewer { zones(filter: {zoneTag: "' + zoneId + '"}) { httpRequests1dGroups(limit: 32, filter: {date_gt: "' + ymd(start) + '", date_leq: "' + ymd(now) + '"}) { dimensions { date } sum { requests cachedRequests bytes threats pageViews } uniq { uniques } } } } }';
+    }
+    var data = await cfGraphQL(q);
+    var z = ((data.viewer && data.viewer.zones) || [])[0] || {};
+    var groups = z.httpRequests1hGroups || z.httpRequests1dGroups || [];
+    groups.sort(function(a, b) {
+      var da = (a.dimensions && (a.dimensions.datetime || a.dimensions.date)) || "";
+      var db = (b.dimensions && (b.dimensions.datetime || b.dimensions.date)) || "";
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+    var req = 0, cached = 0, bw = 0, threats = 0, pv = 0, uniq = 0;
+    groups.forEach(function(g) {
+      var s = g.sum || {};
+      req += s.requests || 0; cached += s.cachedRequests || 0; bw += s.bytes || 0;
+      threats += s.threats || 0; pv += s.pageViews || 0;
+      uniq += (g.uniq && g.uniq.uniques) || 0;
+    });
     var html = '<div class="grid2">' +
       '<div class="stat"><div class="n">' + fmtNum(req) + '</div><div class="l">总请求数</div></div>' +
       '<div class="stat"><div class="n">' + (req ? Math.round(cached / req * 100) : 0) + '%</div><div class="l">缓存命中率</div></div>' +
       '<div class="stat"><div class="n">' + fmtBytes(bw) + '</div><div class="l">总流量</div></div>' +
       '<div class="stat"><div class="n">' + fmtNum(threats) + '</div><div class="l">拦截威胁</div></div>' +
       '<div class="stat"><div class="n">' + fmtNum(pv) + '</div><div class="l">页面浏览</div></div>' +
-      '<div class="stat"><div class="n">' + fmtNum(uniq) + '</div><div class="l">独立访客</div></div></div>';
-    var ts = r.timeseries || [];
-    if (ts.length > 1) {
-      var vals = ts.map(function(p){ return (p.requests && p.requests.all) || 0; });
+      '<div class="stat"><div class="n">' + fmtNum(uniq) + '</div><div class="l">独立访客</div></div></div>' +
+      '<p class="small" style="margin-top:8px">独立访客为各时段相加，含重复访客。</p>';
+    if (groups.length > 1) {
+      var vals = groups.map(function(g){ return ((g.sum || {}).requests) || 0; });
       var max = Math.max.apply(null, vals.concat([1]));
       var bars = vals.map(function(v){ return '<div class="bar" style="height:' + Math.max(2, Math.round(v / max * 100)) + '%"></div>'; }).join("");
-      var step = Math.max(1, Math.floor(ts.length / 7));
-      var lbls = ts.map(function(p, i){
-        if (i % step !== 0 && i !== ts.length - 1) return '<span></span>';
-        var d = new Date(p.since);
+      var step = Math.max(1, Math.floor(groups.length / 7));
+      var lbls = groups.map(function(g, i){
+        if (i % step !== 0 && i !== groups.length - 1) return '<span></span>';
+        var d = new Date((g.dimensions && (g.dimensions.datetime || g.dimensions.date)) || 0);
         return '<span>' + (d.getMonth()+1) + '/' + d.getDate() + '</span>';
       }).join("");
       html += '<h3>请求数趋势</h3><div class="bar-row">' + bars + '</div><div class="bar-lbl">' + lbls + '</div>';
@@ -542,6 +576,7 @@ async function loadUsage() {
     showErr($("usErr"), e);
   }
 }
+
 $("usBtn").addEventListener("click", loadUsage);
 
 /* ---------- Workers 部署 ---------- */
