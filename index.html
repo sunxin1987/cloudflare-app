@@ -206,6 +206,12 @@
         <select id="wkAcctSel"></select>
         <div id="wkList" style="margin-top:10px"><div class="loading">加载中…</div></div>
       </div>
+      <div class="card hidden" id="wkCodeCard">
+        <h2 id="wkCodeTitle">Worker 代码</h2>
+        <textarea id="wkCodeText" rows="16" readonly style="width:100%;padding:10px 12px;font-size:12px;border:1px solid #d0d0d0;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace"></textarea>
+        <button class="btn ghost" id="wkCodeCloseBtn" style="margin-top:8px">关闭</button>
+        <div class="err" id="wkCodeErr"></div>
+      </div>
       <div class="card">
         <h2>部署 Worker</h2>
         <p class="muted">粘贴代码直接部署。支持 ES Module 格式（export default）和 Service Worker 格式（addEventListener），会自动识别。需要 Token 有 Workers Scripts · Edit 权限。</p>
@@ -231,9 +237,23 @@
         <select id="pgAcctSel"></select>
         <div id="pgList" style="margin-top:10px"><div class="loading">加载中…</div></div>
       </div>
-      <div class="card hidden" id="pgDepCard">
-        <h2 id="pgDepTitle">部署记录</h2>
-        <div id="pgDepList"></div>
+      <div class="card hidden" id="pgSetCard">
+        <h2 id="pgSetTitle">构建设置</h2>
+        <label for="pgSetBranch">生产分支</label>
+        <input type="text" id="pgSetBranch" autocomplete="off">
+        <label for="pgSetBuildCmd">构建命令（留空表示不构建）</label>
+        <input type="text" id="pgSetBuildCmd" autocomplete="off" placeholder="例如 npm run build">
+        <label for="pgSetDestDir">输出目录</label>
+        <input type="text" id="pgSetDestDir" autocomplete="off" placeholder="例如 dist">
+        <label for="pgSetRootDir">根目录</label>
+        <input type="text" id="pgSetRootDir" autocomplete="off" placeholder="例如 /">
+        <p class="small" style="margin-top:6px">输出目录、根目录留空表示不改。</p>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn" id="pgSetSaveBtn">保存</button>
+          <button class="btn ghost" id="pgSetCancelBtn">取消</button>
+        </div>
+        <div class="err" id="pgSetErr"></div>
+        <div class="ok" id="pgSetOk"></div>
       </div>
       <div class="card">
         <h2>新建 Pages 项目</h2>
@@ -358,6 +378,8 @@ var API = "https://api.cloudflare.com/client/v4";
 var token = localStorage.getItem("cf_token") || "";
 var zones = [];
 var accounts = [];
+var pagesList = [];
+var openDepProject = null;
 var curTab = "zones";
 
 function $(id) { return document.getElementById(id); }
@@ -534,7 +556,9 @@ async function loadWorkers(acctId) {
       return '<div class="item"><div class="row"><div><div class="t mono">' + esc(w.id) + '</div>' +
         '<div class="d">修改于 ' + fmtDate(w.modified_on) + '　·　创建于 ' + fmtDate(w.created_on) + '</div>' +
         '<div class="d">用量模式：' + esc(w.usage_model || "-") + '</div></div>' +
-        '<button class="btn danger small" onclick="delWorker(\'' + acctId + '\',\'' + esc(w.id) + '\')">删除</button></div></div>';
+        '<div style="display:flex;gap:6px;flex-shrink:0">' +
+        '<button class="btn ghost small" onclick="showWorkerCode(\'' + acctId + '\',\'' + esc(w.id) + '\')">代码</button>' +
+        '<button class="btn danger small" onclick="delWorker(\'' + acctId + '\',\'' + esc(w.id) + '\')">删除</button></div></div></div>';
     }).join("");
   } catch (e) {
     el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
@@ -549,15 +573,41 @@ async function delWorker(acctId, name) {
     alert("删除失败：" + (e.message || e));
   }
 }
+/* 脚本下载返回的是 multipart 文本，从中取出代码部分 */
+function extractScriptCode(txt) {
+  var start = txt.indexOf("\r\n\r\n");
+  var sepLen = 4;
+  if (start === -1) { start = txt.indexOf("\n\n"); sepLen = 2; }
+  if (start === -1) return txt;
+  var body = txt.slice(start + sepLen);
+  var end = body.lastIndexOf("\r\n--");
+  if (end === -1) end = body.lastIndexOf("\n--");
+  if (end !== -1) body = body.slice(0, end);
+  return body.replace(/\s+$/, "");
+}
+async function showWorkerCode(acctId, name) {
+  $("wkCodeCard").classList.remove("hidden");
+  $("wkCodeTitle").textContent = "Worker 代码 · " + name;
+  $("wkCodeText").value = "加载中…";
+  $("wkCodeErr").style.display = "none";
+  try {
+    var r = await fetch(API + "/accounts/" + acctId + "/workers/scripts/" + encodeURIComponent(name), { headers: { "Authorization": "Bearer " + token } });
+    if (!r.ok) throw new Error("读取失败（HTTP " + r.status + "）");
+    $("wkCodeText").value = extractScriptCode(await r.text());
+  } catch (e) { showErr($("wkCodeErr"), e); $("wkCodeText").value = ""; }
+}
+$("wkCodeCloseBtn").addEventListener("click", function(){ $("wkCodeCard").classList.add("hidden"); });
 $("wkAcctSel").addEventListener("change", function(){ loadWorkers(this.value); });
 
 /* ---------- Pages ---------- */
 async function loadPages(acctId) {
   var el = $("pgList");
   el.innerHTML = '<div class="loading">加载中…</div>';
-  $("pgDepCard").classList.add("hidden");
+  $("pgSetCard").classList.add("hidden");
+  openDepProject = null;
   try {
     var list = await cf("/accounts/" + acctId + "/pages/projects?per_page=10");
+    pagesList = list;
     $("pgUpProjSel").innerHTML = list.map(function(p){ return '<option value="' + esc(p.name) + '">' + esc(p.name) + '</option>'; }).join("") || '<option value="">（无项目）</option>';
     if (!list.length) { el.innerHTML = '<p class="muted">该账号下暂无 Pages 项目。</p>'; return; }
     el.innerHTML = list.map(function(p){
@@ -568,8 +618,11 @@ async function loadPages(acctId) {
         '<div class="d mono">' + url + '</div>' +
         '<div class="d">生产分支：' + esc(p.production_branch || "-") + '　·　创建于 ' + fmtDate(p.created_on) + '</div></div>' +
         '<div>' + st + '</div></div>' +
-        '<button class="btn ghost small" style="margin-top:8px" onclick="loadDeployments(\'' + acctId + '\',\'' + esc(p.name) + '\')">查看部署记录</button>' +
-        '<button class="btn danger small" style="margin-top:8px;margin-left:6px" onclick="delPagesProject(\'' + acctId + '\',\'' + esc(p.name) + '\')">删除项目</button></div>';
+        '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' +
+        '<button class="btn ghost small" id="pgDepBtn-' + esc(p.name) + '" onclick="toggleDeployments(\'' + acctId + '\',\'' + esc(p.name) + '\')">查看部署记录</button>' +
+        '<button class="btn ghost small" onclick="showPagesSettings(\'' + acctId + '\',\'' + esc(p.name) + '\')">构建设置</button>' +
+        '<button class="btn danger small" onclick="delPagesProject(\'' + acctId + '\',\'' + esc(p.name) + '\')">删除项目</button></div>' +
+        '<div id="pgDep-' + esc(p.name) + '" style="display:none;margin-top:10px"></div></div>';
     }).join("");
   } catch (e) {
     el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
@@ -586,10 +639,30 @@ async function delPagesProject(acctId, name) {
 }
 $("pgAcctSel").addEventListener("change", function(){ loadPages(this.value); });
 
+async function toggleDeployments(acctId, name) {
+  if (openDepProject === name) {
+    var box = $("pgDep-" + name);
+    if (box) { box.style.display = "none"; box.innerHTML = ""; }
+    var btn = $("pgDepBtn-" + name);
+    if (btn) btn.textContent = "查看部署记录";
+    openDepProject = null;
+    return;
+  }
+  if (openDepProject) {
+    var prevBox = $("pgDep-" + openDepProject);
+    if (prevBox) { prevBox.style.display = "none"; prevBox.innerHTML = ""; }
+    var prevBtn = $("pgDepBtn-" + openDepProject);
+    if (prevBtn) prevBtn.textContent = "查看部署记录";
+  }
+  openDepProject = name;
+  var btn2 = $("pgDepBtn-" + name);
+  if (btn2) btn2.textContent = "收起部署记录";
+  loadDeployments(acctId, name);
+}
 async function loadDeployments(acctId, name) {
-  $("pgDepCard").classList.remove("hidden");
-  $("pgDepTitle").textContent = "部署记录 · " + name;
-  var el = $("pgDepList");
+  var el = $("pgDep-" + name);
+  if (!el) return;
+  el.style.display = "block";
   el.innerHTML = '<div class="loading">加载中…</div>';
   try {
     var list = await cf("/accounts/" + acctId + "/pages/projects/" + encodeURIComponent(name) + "/deployments?per_page=20");
@@ -617,6 +690,38 @@ async function delDeployment(acctId, name, depId) {
     alert("删除失败：" + (e.message || e));
   }
 }
+var curSetProject = null;
+function showPagesSettings(acctId, name) {
+  var p = null;
+  for (var i = 0; i < pagesList.length; i++) { if (pagesList[i].name === name) { p = pagesList[i]; break; } }
+  curSetProject = { acctId: acctId, name: name };
+  $("pgSetCard").classList.remove("hidden");
+  $("pgSetTitle").textContent = "构建设置 · " + name;
+  $("pgSetErr").style.display = "none"; $("pgSetOk").style.display = "none";
+  var bc = (p && p.build_config) || {};
+  $("pgSetBranch").value = (p && p.production_branch) || "main";
+  $("pgSetBuildCmd").value = bc.build_command || "";
+  $("pgSetDestDir").value = bc.destination_dir || "";
+  $("pgSetRootDir").value = bc.root_dir || "";
+}
+$("pgSetCancelBtn").addEventListener("click", function(){ $("pgSetCard").classList.add("hidden"); curSetProject = null; });
+$("pgSetSaveBtn").addEventListener("click", async function(){
+  if (!curSetProject) return;
+  $("pgSetErr").style.display = "none"; $("pgSetOk").style.display = "none";
+  var bc = { build_command: $("pgSetBuildCmd").value.trim() };
+  var dest = $("pgSetDestDir").value.trim();
+  var root = $("pgSetRootDir").value.trim();
+  if (dest) bc.destination_dir = dest;
+  if (root) bc.root_dir = root;
+  try {
+    await cf("/accounts/" + curSetProject.acctId + "/pages/projects/" + encodeURIComponent(curSetProject.name), "PATCH", {
+      production_branch: $("pgSetBranch").value.trim() || "main",
+      build_config: bc
+    });
+    $("pgSetOk").style.display = "block"; $("pgSetOk").textContent = "已保存构建设置。";
+    loadPages(curSetProject.acctId);
+  } catch (e) { showErr($("pgSetErr"), e); }
+});
 
 
 /* ---------- KV ---------- */
