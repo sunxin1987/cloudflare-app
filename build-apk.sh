@@ -31,7 +31,12 @@ javac -encoding UTF-8 -source 8 -target 8 -cp "$AJAR" -d "$OUT/classes" \
   "$PROJ/app/src/main/java/com/sunyazhong/cloudflare/MainActivity.java" 2>&1 | grep -v "obsolete" || true
 
 echo "== d8 =="
-"$BT/d8" --release --lib "$AJAR" --output "$OUT/dex" "$OUT/classes/com/sunyazhong/cloudflare/MainActivity.class"
+# 注意：必须把全部 .class 文件都传给 d8，不能只传 MainActivity.class。
+# 只传单个文件会丢掉匿名内部类（如 WebChromeClient 的 MainActivity$1），
+# 运行时 new WebChromeClient(){...} 报 NoClassDefFoundError，启动即闪退。
+# 2026-11-22 v1.1.0 就是这么坏的，教训。
+# （d8 不接受目录作输入，用 glob 把目录下所有 .class 都传进去。）
+"$BT/d8" --release --lib "$AJAR" --output "$OUT/dex" "$OUT/classes/com/sunyazhong/cloudflare/"*.class
 
 echo "== add classes.dex =="
 cd "$OUT/dex" && zip -q "$OUT/app-unaligned.apk" classes.dex && cd -
@@ -51,9 +56,9 @@ fi
 echo "== apksigner =="
 mkdir -p ~/workspace/your_files/cloudflare
 "$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android \
-  --out ~/workspace/your_files/cloudflare/cloudflare-v1.1.0.apk "$OUT/app-aligned.apk"
+  --out ~/workspace/your_files/cloudflare/cloudflare-v1.1.1.apk "$OUT/app-aligned.apk"
 
 echo "== verify =="
-"$BT/apksigner" verify --print-certs ~/workspace/your_files/cloudflare/cloudflare-v1.1.0.apk
-"$BT/aapt2" dump badging ~/workspace/your_files/cloudflare/cloudflare-v1.1.0.apk | head -8
-ls -la ~/workspace/your_files/cloudflare/cloudflare-v1.1.0.apk
+"$BT/apksigner" verify --print-certs ~/workspace/your_files/cloudflare/cloudflare-v1.1.1.apk
+"$BT/aapt2" dump badging ~/workspace/your_files/cloudflare/cloudflare-v1.1.1.apk | head -8
+ls -la ~/workspace/your_files/cloudflare/cloudflare-v1.1.1.apk
