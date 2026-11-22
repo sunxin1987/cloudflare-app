@@ -56,9 +56,9 @@ fi
 echo "== apksigner =="
 mkdir -p ~/workspace/your_files/cloudflare
 "$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android \
-  --out ~/workspace/your_files/cloudflare/cloudflare-v1.2.1.apk "$OUT/app-aligned.apk"
+  --out ~/workspace/your_files/cloudflare/cloudflare-v1.3.0.apk "$OUT/app-aligned.apk"
 
 echo "== verify =="
-"$BT/apksigner" verify --print-certs ~/workspace/your_files/cloudflare/cloudflare-v1.2.1.apk
-"$BT/aapt2" dump badging ~/workspace/your_files/cloudflare/cloudflare-v1.2.1.apk | head -8
-ls -la ~/workspace/your_files/cloudflare/cloudflare-v1.2.1.apk
+"$BT/apksigner" verify --print-certs ~/workspace/your_files/cloudflare/cloudflare-v1.3.0.apk
+"$BT/aapt2" dump badging ~/workspace/your_files/cloudflare/cloudflare-v1.3.0.apk | head -8
+ls -la ~/workspace/your_files/cloudflare/cloudflare-v1.3.0.apk

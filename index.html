@@ -370,10 +370,15 @@ async function cf(path, method, body) {
   var opt = { method: method || "GET", headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" } };
   if (body) opt.body = JSON.stringify(body);
   var r = await fetch(API + path, opt);
-  var j = await r.json().catch(function(){ return {}; });
-  if (!j.success) {
+  var txt = await r.text();
+  var j = {};
+  try { j = txt ? JSON.parse(txt) : {}; } catch (e) { j = {}; }
+  if (j.success === false || (!j.success && txt)) {
     var m = (j.errors && j.errors[0] && j.errors[0].message) || ("请求失败（HTTP " + r.status + "）");
     var e = new Error(m); e.status = r.status; throw e;
+  }
+  if (!r.ok) {
+    var e2 = new Error("请求失败（HTTP " + r.status + "）"); e2.status = r.status; throw e2;
   }
   return j.result;
 }
@@ -526,12 +531,22 @@ async function loadWorkers(acctId) {
     var list = await cf("/accounts/" + acctId + "/workers/scripts?per_page=50");
     if (!list.length) { el.innerHTML = '<p class="muted">该账号下暂无 Workers 脚本。</p>'; return; }
     el.innerHTML = list.map(function(w){
-      return '<div class="item"><div class="t mono">' + esc(w.id) + '</div>' +
+      return '<div class="item"><div class="row"><div><div class="t mono">' + esc(w.id) + '</div>' +
         '<div class="d">修改于 ' + fmtDate(w.modified_on) + '　·　创建于 ' + fmtDate(w.created_on) + '</div>' +
-        '<div class="d">用量模式：' + esc(w.usage_model || "-") + '</div></div>';
+        '<div class="d">用量模式：' + esc(w.usage_model || "-") + '</div></div>' +
+        '<button class="btn danger small" onclick="delWorker(\'' + acctId + '\',\'' + esc(w.id) + '\')">删除</button></div></div>';
     }).join("");
   } catch (e) {
     el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
+  }
+}
+async function delWorker(acctId, name) {
+  if (!confirm("确定删除 Worker「" + name + "」吗？脚本和绑定的域名路由都会一起删除，不可恢复。")) return;
+  try {
+    await cf("/accounts/" + acctId + "/workers/scripts/" + encodeURIComponent(name), "DELETE");
+    loadWorkers(acctId);
+  } catch (e) {
+    alert("删除失败：" + (e.message || e));
   }
 }
 $("wkAcctSel").addEventListener("change", function(){ loadWorkers(this.value); });
@@ -553,10 +568,20 @@ async function loadPages(acctId) {
         '<div class="d mono">' + url + '</div>' +
         '<div class="d">生产分支：' + esc(p.production_branch || "-") + '　·　创建于 ' + fmtDate(p.created_on) + '</div></div>' +
         '<div>' + st + '</div></div>' +
-        '<button class="btn ghost small" style="margin-top:8px" onclick="loadDeployments(\'' + acctId + '\',\'' + esc(p.name) + '\')">查看部署记录</button></div>';
+        '<button class="btn ghost small" style="margin-top:8px" onclick="loadDeployments(\'' + acctId + '\',\'' + esc(p.name) + '\')">查看部署记录</button>' +
+        '<button class="btn danger small" style="margin-top:8px;margin-left:6px" onclick="delPagesProject(\'' + acctId + '\',\'' + esc(p.name) + '\')">删除项目</button></div>';
     }).join("");
   } catch (e) {
     el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
+  }
+}
+async function delPagesProject(acctId, name) {
+  if (!confirm("确定删除 Pages 项目「" + name + "」吗？项目和全部部署记录都会一起删除，不可恢复。")) return;
+  try {
+    await cf("/accounts/" + acctId + "/pages/projects/" + encodeURIComponent(name), "DELETE");
+    loadPages(acctId);
+  } catch (e) {
+    alert("删除失败：" + (e.message || e));
   }
 }
 $("pgAcctSel").addEventListener("change", function(){ loadPages(this.value); });
@@ -576,10 +601,20 @@ async function loadDeployments(acctId, name) {
         '<div class="d">提交：' + esc((d.deployment_trigger && d.deployment_trigger.metadata && d.deployment_trigger.metadata.commit_message) || "-") + '</div>' +
         '<div class="d">部署于 ' + fmtDate(d.created_on) + '</div></div>' +
         '<span class="pill ' + pill + '">' + esc(st) + '</span></div>' +
-        '<button class="btn ghost small" style="margin-top:8px" onclick="retryDeployment(\'' + acctId + '\',\'' + esc(name) + '\',\'' + d.id + '\')">重新部署</button></div>';
+        '<button class="btn ghost small" style="margin-top:8px" onclick="retryDeployment(\'' + acctId + '\',\'' + esc(name) + '\',\'' + d.id + '\')">重新部署</button>' +
+        '<button class="btn danger small" style="margin-top:8px;margin-left:6px" onclick="delDeployment(\'' + acctId + '\',\'' + esc(name) + '\',\'' + d.id + '\')">删除部署</button></div>';
     }).join("");
   } catch (e) {
     el.innerHTML = '<p class="muted">加载失败：' + esc(e.message || e) + '</p>';
+  }
+}
+async function delDeployment(acctId, name, depId) {
+  if (!confirm("确定删除这条部署记录吗？")) return;
+  try {
+    await cf("/accounts/" + acctId + "/pages/projects/" + encodeURIComponent(name) + "/deployments/" + depId, "DELETE");
+    loadDeployments(acctId, name);
+  } catch (e) {
+    alert("删除失败：" + (e.message || e));
   }
 }
 
