@@ -175,14 +175,15 @@
           <a class="btn ghost small" href="https://developers.cloudflare.com/dns/" style="text-decoration:none">查看文档</a>
         </div>
         <p class="muted" style="margin-top:6px">加速并保护您的站点和应用程序</p>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <input type="text" id="znSearch" placeholder="按域名搜索…" autocomplete="off" style="flex:1;min-width:0;margin-top:0">
-          <button class="btn" id="znAddBtn" style="margin-top:0;white-space:nowrap">添加域名</button>
+        <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
+          <button class="btn" id="znConnectBtn" style="margin-top:0;white-space:nowrap">连接域名</button>
+          <button class="btn ghost" id="znAddBtn" style="margin-top:0;white-space:nowrap">添加域名</button>
         </div>
+        <input type="text" id="znSearch" placeholder="按域名搜索…" autocomplete="off" style="margin-top:10px">
         <div id="znAddForm" style="display:none;margin-top:10px">
           <label for="znNewName">域名（例如 example.com）</label>
           <input type="text" id="znNewName" placeholder="example.com" autocomplete="off">
-          <p class="small" style="margin-top:6px">添加后需把域名的 NS 改成 Cloudflare 给的地址，状态才会变“活动”。</p>
+          <p class="small" id="znAddHint" style="margin-top:6px">添加后需把域名的 NS 改成 Cloudflare 给的地址，状态才会变“活动”。</p>
           <div style="display:flex;gap:8px">
             <button class="btn" id="znAddConfirmBtn">确认添加</button>
             <button class="btn ghost" id="znAddCancelBtn">取消</button>
@@ -598,21 +599,37 @@ async function delZone(zoneId, name) {
   } catch (e) { alert("删除失败：" + (e.message || e)); }
 }
 $("znSearch").addEventListener("input", function(){ znFilter = this.value.trim().toLowerCase(); renderZones(); });
-$("znAddBtn").addEventListener("click", function(){
+var znMode = "add";
+function openZnForm(mode) {
+  znMode = mode;
   $("znAddForm").style.display = "block";
   $("znAddErr").style.display = "none"; $("znAddOk").style.display = "none";
-});
+  if (mode === "connect") {
+    $("znAddHint").textContent = "连接你已经拥有的域名：Cloudflare 会先扫描它现有的 DNS 记录并导入，添加成功后按提示修改 NS。";
+    $("znAddConfirmBtn").textContent = "确认连接";
+  } else {
+    $("znAddHint").textContent = "添加后需把域名的 NS 改成 Cloudflare 给的地址，状态才会变“活动”。";
+    $("znAddConfirmBtn").textContent = "确认添加";
+  }
+}
+$("znAddBtn").addEventListener("click", function(){ openZnForm("add"); });
+$("znConnectBtn").addEventListener("click", function(){ openZnForm("connect"); });
 $("znAddCancelBtn").addEventListener("click", function(){ $("znAddForm").style.display = "none"; });
 $("znAddConfirmBtn").addEventListener("click", async function(){
   var name = $("znNewName").value.trim().toLowerCase();
   $("znAddErr").style.display = "none"; $("znAddOk").style.display = "none";
   if (!accounts.length) { showErr($("znAddErr"), "没有可用账号。"); return; }
   if (!/^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$/.test(name)) { showErr($("znAddErr"), "域名格式不对，例如 example.com。"); return; }
-  var btn = $("znAddConfirmBtn"); btn.disabled = true; btn.textContent = "添加中…";
+  var btn = $("znAddConfirmBtn"); btn.disabled = true; btn.textContent = (znMode === "connect" ? "连接中…" : "添加中…");
   try {
-    var z = await cf("/zones", "POST", { name: name, account: { id: accounts[0].id }, type: "full" });
+    var body = { name: name, account: { id: accounts[0].id }, type: "full" };
+    if (znMode === "connect") body.jump_start = true;
+    var z = await cf("/zones", "POST", body);
     $("znAddOk").style.display = "block";
-    $("znAddOk").textContent = "已添加 " + name + "，请把域名的 NS 改成：" + ((z.name_servers || []).join("、") || "（见控制台）");
+    var ns = ((z.name_servers || []).join("、") || "（见控制台）");
+    $("znAddOk").textContent = (znMode === "connect"
+      ? "已连接 " + name + "，Cloudflare 正在扫描它原有的 DNS 记录，稍后在 DNS 页查看导入的记录；请把域名的 NS 改成：" + ns
+      : "已添加 " + name + "，请把域名的 NS 改成：" + ns);
     $("znNewName").value = "";
     zones = await cf("/zones?per_page=50&order=name&direction=asc");
     fillZoneSelects(); renderZones(); loadZnStats();
@@ -621,7 +638,7 @@ $("znAddConfirmBtn").addEventListener("click", async function(){
     if (/permission/i.test(String(msg))) msg = "Token 缺少 Zone · Edit 权限：请在 Cloudflare 控制台的 API Tokens 里给当前 Token 加上 Zone · Edit，再回来添加。";
     showErr($("znAddErr"), msg);
   }
-  btn.disabled = false; btn.textContent = "确认添加";
+  btn.disabled = false; btn.textContent = (znMode === "connect" ? "确认连接" : "确认添加");
 });
 
 /* ---------- DNS ---------- */
